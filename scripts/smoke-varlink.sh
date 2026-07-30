@@ -89,9 +89,9 @@ grep -q 'state=absent' "${artifact_dir}/direct-reboot-status.out"
 stop_daemon
 
 start_daemon activation
-varlinkctl --no-ask-password info "unix:${socket_path}" \
+varlinkctl info "unix:${socket_path}" \
   >"${artifact_dir}/varlink-info.out"
-varlinkctl --no-ask-password list-methods \
+varlinkctl list-methods \
   "unix:${socket_path}" io.github.Gustav0ar.WireView \
   >"${artifact_dir}/varlink-methods.out"
 grep -q 'RebootDevice' "${artifact_dir}/varlink-methods.out"
@@ -99,7 +99,7 @@ for method in GetDeviceInfo ClearFaults BeginHistoryDump ReadHistoryDumpChunk \
   EndHistoryDump GetPollInterval SetPollInterval PauseDisplay ResumeDisplay; do
   grep -q "${method}" "${artifact_dir}/varlink-methods.out"
 done
-varlinkctl --no-ask-password call \
+varlinkctl call \
   "unix:${socket_path}" \
   io.github.Gustav0ar.WireView.GetStatus \
   '{}' \
@@ -138,7 +138,7 @@ jq -cn --arg configuration_json "${original_configuration}" \
   --arg revision "${original_revision}" \
   '{configuration: {configuration_json: $configuration_json, revision: $revision}}' \
   >"${artifact_dir}/configuration-stale-request.json"
-if varlinkctl --no-ask-password call \
+if varlinkctl call \
   "unix:${socket_path}" \
   io.github.Gustav0ar.WireView.ApplyConfiguration \
   "$(cat "${artifact_dir}/configuration-stale-request.json")" \
@@ -187,7 +187,7 @@ if ./target/debug/wireview --socket "${socket_path}" config set \
 fi
 grep -q '^invalid argument: backlight_percent must be between 0 and 100$' \
   "${artifact_dir}/configuration-item-invalid-cli.out"
-if varlinkctl --no-ask-password call \
+if varlinkctl call \
   "unix:${socket_path}" \
   io.github.Gustav0ar.WireView.SetConfigurationItem \
   '{"key":"backlight_percent","value":"101","persist":false,"confirm":false}' \
@@ -195,7 +195,7 @@ if varlinkctl --no-ask-password call \
   echo "daemon accepted an invalid individual configuration value" >&2
   exit 1
 fi
-if varlinkctl --no-ask-password call \
+if varlinkctl call \
   "unix:${socket_path}" \
   io.github.Gustav0ar.WireView.RebootDevice \
   '{"confirm":false}' \
@@ -203,7 +203,7 @@ if varlinkctl --no-ask-password call \
   echo "daemon accepted a reboot without API-boundary confirmation" >&2
   exit 1
 fi
-varlinkctl --no-ask-password call \
+varlinkctl call \
   "unix:${socket_path}" \
   io.github.Gustav0ar.WireView.GetConfigurationItem \
   '{"key":"fan.mode"}' \
@@ -223,7 +223,7 @@ jq -cn --arg configuration_json "${invalid_configuration}" \
   --arg revision "${configuration_revision}" \
   '{configuration: {configuration_json: $configuration_json, revision: $revision}}' \
   >"${artifact_dir}/configuration-invalid-request.json"
-if varlinkctl --no-ask-password call \
+if varlinkctl call \
   "unix:${socket_path}" \
   io.github.Gustav0ar.WireView.ApplyConfiguration \
   "$(cat "${artifact_dir}/configuration-invalid-request.json")" \
@@ -246,7 +246,7 @@ jq -cn --arg configuration_json "${invalid_color_configuration}" \
   --arg revision "${invalid_color_revision}" \
   '{configuration: {configuration_json: $configuration_json, revision: $revision}}' \
   >"${artifact_dir}/configuration-invalid-color-request.json"
-if varlinkctl --no-ask-password call \
+if varlinkctl call \
   "unix:${socket_path}" \
   io.github.Gustav0ar.WireView.ApplyConfiguration \
   "$(cat "${artifact_dir}/configuration-invalid-color-request.json")" \
