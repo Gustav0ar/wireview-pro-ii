@@ -50,7 +50,7 @@ jobs:
           sudo systemctl daemon-reload
           sudo systemctl enable --now wireviewd.socket
           sudo systemctl restart wireviewd.service
-          wireview status | grep -Fq 'API version: 1'
+          wireview status | grep -Fq 'api=1'
           sudo apt-get install --yes ./dist/*.deb
           cli_version="$(wireview version)"
           daemon_version="$(wireviewd --version)"
@@ -60,13 +60,13 @@ jobs:
           sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/deb.build-id
           test -s dist/deb.build-id
           test -f /usr/lib/systemd/system/wireviewd.socket
-          wireview status | grep -Fq 'API version: 1'
+          wireview status | grep -Fq 'api=1'
           sudo systemctl stop wireviewd.service
           test "$(systemctl is-active wireviewd.socket)" = active
-          wireview status | grep -Fq 'API version: 1'
+          wireview status | grep -Fq 'api=1'
           test "$(systemctl is-active wireviewd.service)" = active
           sudo systemctl restart wireviewd.service
-          wireview status | grep -Fq 'API version: 1'
+          wireview status | grep -Fq 'api=1'
           sudo apt-get remove --yes wireviewd
           test ! -e /usr/bin/wireview
           sudo rm -f /etc/systemd/system/wireviewd.service.d/ci.conf
@@ -82,7 +82,7 @@ jobs:
 
   rpm:
     runs-on: ubuntu-24.04
-    container: fedora:43@sha256:f25c16e3d17ffb936b424d6cec5c2fbd70e6fde3b497f3fe460a500b04c12ea5
+    container: fedora:43@sha256:762d73ba1c455232b0272c5d445a34f36c4b9f421cbc05ce8102552325b6a222
     steps:
       - name: Install runner dependencies
         run: dnf install --assumeyes gcc git libudev-devel rpm-build

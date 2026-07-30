@@ -28,6 +28,5 @@ jobs:
         run: |
           cargo install cargo-deny --version 0.20.2 --locked
           cargo deny check
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
       - run: bash scripts/smoke-varlink.sh
       - run: bash scripts/validate-packaging.sh
