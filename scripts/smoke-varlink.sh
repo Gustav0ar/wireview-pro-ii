@@ -7,6 +7,19 @@ socket_path="${artifact_dir}/wireview.varlink"
 daemon_pid=""
 monitor_pid=""
 
+report_error() {
+  local status="$1"
+  local line="$2"
+  local command="$3"
+  trap - ERR
+  printf 'Varlink smoke test failed at line %s: %s\n' \
+    "${line}" "${command}" >&2
+  if [[ -f "${artifact_dir}/daemon.log" ]]; then
+    tail -n 50 "${artifact_dir}/daemon.log" >&2
+  fi
+  exit "${status}"
+}
+
 cleanup() {
   if [[ -n "${monitor_pid}" ]]; then
     kill "${monitor_pid}" 2>/dev/null || true
@@ -18,6 +31,7 @@ cleanup() {
   fi
   rm -rf -- "${artifact_dir}"
 }
+trap 'report_error "$?" "${LINENO}" "${BASH_COMMAND}"' ERR
 trap cleanup EXIT
 
 cd "${project_dir}"
