@@ -1,0 +1,18 @@
+# Maintainer: wireviewd contributors <wireviewd-maintainers@users.noreply.github.com>
+
+pkgname=wireviewd
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Linux daemon and CLI for the Thermal Grizzly WireView Pro II'
+url='@PROJECT_URL@'
+arch=('x86_64' 'aarch64')
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'systemd' 'systemd-libs')
+install=wireviewd.install
+options=('!debug' '!purge' '!strip')
+source=('wireviewd-root.tar')
+sha256sums=('@ROOT_SHA256@')
+
+package() {
+  cp -a "${srcdir}/root/." "${pkgdir}/"
+}

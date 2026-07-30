@@ -1,0 +1,212 @@
+name: Packages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/packages.yml'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+      - 'src/**'
+      - 'interfaces/**'
+      - 'packaging/**'
+      - 'scripts/build-*.sh'
+      - 'scripts/install-staged.sh'
+      - 'scripts/validate-packaging.sh'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.97.1
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes dpkg-dev libudev-dev
+      - run: bash scripts/build-packages.sh deb
+      - name: Test Debian package lifecycle
+        run: |
+          WIREVIEW_SKIP_BUILD=1 \
+            WIREVIEW_DIST_DIR="${PWD}/target/previous-package" \
+            WIREVIEW_PACKAGE_VERSION=0.999.0 \
+            bash scripts/build-packages.sh deb
+          sudo apt-get install --yes ./target/previous-package/*.deb
+          sudo install -d /etc/systemd/system/wireviewd.service.d
+          printf '%s\n' \
+            '[Service]' \
+            'ExecStart=' \
+            'ExecStart=/usr/bin/wireviewd --mock' \
+            | sudo tee /etc/systemd/system/wireviewd.service.d/ci.conf >/dev/null
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now wireviewd.socket
+          sudo systemctl restart wireviewd.service
+          wireview status | grep -Fq 'API version: 1'
+          sudo apt-get install --yes ./dist/*.deb
+          cli_version="$(wireview version)"
+          daemon_version="$(wireviewd --version)"
+          echo "${cli_version}"
+          echo "${daemon_version}"
+          test "${daemon_version}" = "${cli_version/wireview /wireviewd }"
+          sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/deb.build-id
+          test -s dist/deb.build-id
+          test -f /usr/lib/systemd/system/wireviewd.socket
+          wireview status | grep -Fq 'API version: 1'
+          sudo systemctl stop wireviewd.service
+          test "$(systemctl is-active wireviewd.socket)" = active
+          wireview status | grep -Fq 'API version: 1'
+          test "$(systemctl is-active wireviewd.service)" = active
+          sudo systemctl restart wireviewd.service
+          wireview status | grep -Fq 'API version: 1'
+          sudo apt-get remove --yes wireviewd
+          test ! -e /usr/bin/wireview
+          sudo rm -f /etc/systemd/system/wireviewd.service.d/ci.conf
+          sudo rmdir --ignore-fail-on-non-empty /etc/systemd/system/wireviewd.service.d
+          sudo systemctl daemon-reload
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wireviewd-deb
+          path: |
+            dist/*.deb
+            dist/*.spdx.json
+            dist/deb.build-id
+
+  rpm:
+    runs-on: ubuntu-24.04
+    container: fedora:43@sha256:f25c16e3d17ffb936b424d6cec5c2fbd70e6fde3b497f3fe460a500b04c12ea5
+    steps:
+      - name: Install runner dependencies
+        run: dnf install --assumeyes gcc git libudev-devel rpm-build
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.97.1
+      - run: bash scripts/build-packages.sh rpm
+      - name: Test RPM package lifecycle
+        run: |
+          WIREVIEW_SKIP_BUILD=1 \
+            WIREVIEW_DIST_DIR="${PWD}/target/previous-package" \
+            WIREVIEW_PACKAGE_VERSION=0.999.0 \
+            bash scripts/build-packages.sh rpm
+          dnf install --assumeyes target/previous-package/*.rpm
+          dnf upgrade --assumeyes dist/*.rpm
+          cli_version="$(wireview version)"
+          daemon_version="$(wireviewd --version)"
+          echo "${cli_version}"
+          echo "${daemon_version}"
+          test "${daemon_version}" = "${cli_version/wireview /wireviewd }"
+          sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/rpm.build-id
+          test -s dist/rpm.build-id
+          test -f /usr/lib/systemd/system/wireviewd.socket
+          dnf remove --assumeyes wireviewd
+          test ! -e /usr/bin/wireview
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wireviewd-rpm
+          path: |
+            dist/*.rpm
+            dist/rpm.build-id
+
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel@sha256:33c534be6c990710a878b37192904dd448e162ade06a201d95a80b42be2110c7
+    steps:
+      - name: Install runner dependencies
+        run: pacman -Syu --noconfirm git rustup systemd
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Configure unprivileged package builder
+        run: |
+          useradd --create-home builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+          runuser -u builder -- rustup default 1.97.1
+      - name: Build package
+        run: runuser -u builder -- bash scripts/build-packages.sh arch
+      - name: Test Arch package lifecycle
+        run: |
+          runuser -u builder -- env \
+            WIREVIEW_SKIP_BUILD=1 \
+            WIREVIEW_DIST_DIR="${PWD}/target/previous-package" \
+            WIREVIEW_PACKAGE_VERSION=0.999.0 \
+            bash scripts/build-packages.sh arch
+          pacman -U --noconfirm target/previous-package/*.pkg.tar.zst
+          pacman -U --noconfirm dist/*.pkg.tar.zst
+          cli_version="$(wireview version)"
+          daemon_version="$(wireviewd --version)"
+          echo "${cli_version}"
+          echo "${daemon_version}"
+          test "${daemon_version}" = "${cli_version/wireview /wireviewd }"
+          sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/arch.build-id
+          test -s dist/arch.build-id
+          test -f /usr/lib/systemd/system/wireviewd.socket
+          pacman -R --noconfirm wireviewd
+          test ! -e /usr/bin/wireview
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wireviewd-arch
+          path: |
+            dist/*.pkg.tar.zst
+            dist/arch.build-id
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [deb, rpm, arch]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: wireviewd-*
+          path: release
+          merge-multiple: true
+      - name: Verify tag, version, and cross-package build identity
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          test "v${version}" = "${GITHUB_REF_NAME}"
+          expected_id="git-$(git rev-parse --short=12 HEAD)-$(date --utc --date="@$(git show -s --format=%ct HEAD)" '+%Y%m%d%H%M%S')"
+          test "$(find release -maxdepth 1 -name '*.build-id' -type f | wc -l)" -eq 3
+          test "$(cat release/*.build-id | sort -u | wc -l)" -eq 1
+          test "$(head -n 1 release/deb.build-id)" = "${expected_id}"
+          rm release/*.build-id
+      - name: Create checksums
+        run: |
+          cd release
+          sha256sum ./* > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+      - name: Sign checksum manifest
+        run: >-
+          cosign sign-blob --yes
+          --bundle release/SHA256SUMS.sigstore.json
+          release/SHA256SUMS
+      - name: Attest release provenance
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        with:
+          subject-path: |
+            release/*.deb
+            release/*.rpm
+            release/*.pkg.tar.zst
+      - name: Attest release SBOM
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        with:
+          subject-path: |
+            release/*.deb
+            release/*.rpm
+            release/*.pkg.tar.zst
+          sbom-path: release/wireviewd.spdx.json
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" release/* --generate-notes --verify-tag

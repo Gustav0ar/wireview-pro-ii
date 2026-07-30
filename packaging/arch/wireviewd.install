@@ -1,0 +1,20 @@
+# shellcheck shell=bash
+
+post_install() {
+  printf '%s\n' 'Enable the socket with: systemctl enable --now wireviewd.socket'
+}
+
+post_upgrade() {
+  systemctl try-restart wireviewd.service >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+  systemctl disable --now wireviewd.socket >/dev/null 2>&1 || true
+  systemctl stop wireviewd.service >/dev/null 2>&1 || true
+}
+
+post_remove() {
+  for device in /sys/class/tty/ttyACM*; do
+    [[ -e "${device}" ]] && udevadm trigger --action=add "${device}" || true
+  done
+}

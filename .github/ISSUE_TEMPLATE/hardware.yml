@@ -1,0 +1,66 @@
+name: Hardware or device issue
+description: Report connection, telemetry, history, display, or configuration problems
+title: "[hardware]: "
+labels:
+  - hardware
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include the device UID, serial number, firmware images, or unredacted qualification evidence.
+        For security vulnerabilities, use GitHub's private Security Advisory page instead.
+  - type: input
+    id: version
+    attributes:
+      label: wireview version
+      description: Paste the complete output of `wireview version`.
+      placeholder: wireview 1.0.0 (build source-...)
+    validations:
+      required: true
+  - type: input
+    id: distribution
+    attributes:
+      label: Linux distribution
+      placeholder: Ubuntu 24.04, Fedora 43, Arch Linux
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware and configuration versions
+      description: Copy only the firmware and configuration-version fields from `wireview info`. Remove the UID.
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection arrangement
+      options:
+        - Directly attached to the host
+        - Passed through to a virtual machine
+        - Returned from a virtual machine
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe what happened, what you expected, and whether reconnecting changed it.
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Relevant command output
+      description: Include `wireview status`, relevant CLI output, and sanitized service logs. Remove UIDs and serial numbers.
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed device UIDs, serial numbers, firmware images, and other private hardware data.
+          required: true
+        - label: I did not run multiple host applications against the device simultaneously.
+          required: true

@@ -1,0 +1,370 @@
+interface io.github.Gustav0ar.WireView
+
+type StatusDto(
+    api_version: int,
+    api_compatibility_id: string,
+    api_capabilities: []string,
+    daemon_version: string,
+    daemon_build_id: string,
+    state: string,
+    sequence: int,
+    session_id: int,
+    connected_port: string,
+    last_disconnect_reason: string,
+    busy_operation: string,
+    recovery_cause: string,
+    candidates: []string,
+    poll_interval_ms: int,
+    display_paused: bool,
+    display_pause_debug_active: bool,
+    display_pause_history_active: bool,
+    display_pause_remaining_ms: int
+)
+
+type TelemetryDto(
+    sequence: int,
+    session_id: int,
+    observed_at_ms: int,
+    stale: bool,
+    vdd_v: float,
+    avg_voltage_v: float,
+    total_current_a: float,
+    total_power_w: float,
+    fan_duty_percent: float,
+    cable_capability_w: int,
+    pin_voltages_v: []float,
+    pin_currents_a: []float,
+    pin_power_w: []float,
+    input_temp_c: float,
+    output_temp_c: float,
+    external_1_present: bool,
+    external_1_temp_c: float,
+    external_2_present: bool,
+    external_2_temp_c: float,
+    active_fault_mask: int,
+    logged_fault_mask: int,
+    unknown_active_fault_mask: int,
+    unknown_logged_fault_mask: int,
+    active_faults: []string,
+    logged_faults: []string
+)
+
+type ScreenDto(
+    active: string
+)
+
+type RebootDeviceDto(
+    accepted: bool
+)
+
+type HistoryChunkDto(
+    offset: int,
+    total_bytes: int,
+    data: []int
+)
+
+type HistoryDumpDto(
+    dump_id: int,
+    session_id: int,
+    total_bytes: int
+)
+
+type ConfigurationDto(
+    configuration_json: string,
+    revision: string
+)
+
+type ConfigurationItemDto(
+    key: string,
+    value_json: string
+)
+
+type DeviceInfoDto(
+    unique_id: string,
+    vendor_id: int,
+    product_id: int,
+    firmware_version: string,
+    hardware_revision: string,
+    config_version: int,
+    product_name: string,
+    build_string: string,
+    capabilities: []string
+)
+
+type PollIntervalDto(
+    milliseconds: int
+)
+
+type DisplayPauseDto(
+    paused: bool,
+    debug_lease_active: bool,
+    history_dump_active: bool,
+    remaining_ms: int
+)
+
+type DeviceEventDto(
+    event: string,
+    sequence: int,
+    session_id: int,
+    port: ?string,
+    reason: ?string,
+    screen: ?string
+)
+
+method GetStatus() -> (
+    api_version: int,
+    api_compatibility_id: string,
+    api_capabilities: []string,
+    daemon_version: string,
+    daemon_build_id: string,
+    state: string,
+    sequence: int,
+    session_id: int,
+    connected_port: string,
+    last_disconnect_reason: string,
+    busy_operation: string,
+    recovery_cause: string,
+    candidates: []string,
+    poll_interval_ms: int,
+    display_paused: bool,
+    display_pause_debug_active: bool,
+    display_pause_history_active: bool,
+    display_pause_remaining_ms: int
+)
+
+method GetTelemetry() -> (
+    sequence: int,
+    session_id: int,
+    observed_at_ms: int,
+    stale: bool,
+    vdd_v: float,
+    avg_voltage_v: float,
+    total_current_a: float,
+    total_power_w: float,
+    fan_duty_percent: float,
+    cable_capability_w: int,
+    pin_voltages_v: []float,
+    pin_currents_a: []float,
+    pin_power_w: []float,
+    input_temp_c: float,
+    output_temp_c: float,
+    external_1_present: bool,
+    external_1_temp_c: float,
+    external_2_present: bool,
+    external_2_temp_c: float,
+    active_fault_mask: int,
+    logged_fault_mask: int,
+    unknown_active_fault_mask: int,
+    unknown_logged_fault_mask: int,
+    active_faults: []string,
+    logged_faults: []string
+)
+
+method SetScreen(
+    screen: string
+) -> (
+    active: string
+)
+
+method ReadHistoryChunk(
+    offset: int,
+    length: int
+) -> (
+    offset: int,
+    total_bytes: int,
+    data: []int
+)
+
+method BeginHistoryDump() -> (
+    dump_id: int,
+    session_id: int,
+    total_bytes: int
+)
+
+method ReadHistoryDumpChunk(
+    dump_id: int,
+    offset: int,
+    length: int
+) -> (
+    offset: int,
+    total_bytes: int,
+    data: []int
+)
+
+method EndHistoryDump(
+    dump_id: int
+) -> ()
+
+method GetDeviceInfo() -> (
+    unique_id: string,
+    vendor_id: int,
+    product_id: int,
+    firmware_version: string,
+    hardware_revision: string,
+    config_version: int,
+    product_name: string,
+    build_string: string,
+    capabilities: []string
+)
+
+method ClearFaults(
+    active_mask: int,
+    logged_mask: int,
+    confirm: bool
+) -> (
+    sequence: int,
+    session_id: int,
+    observed_at_ms: int,
+    stale: bool,
+    vdd_v: float,
+    avg_voltage_v: float,
+    total_current_a: float,
+    total_power_w: float,
+    fan_duty_percent: float,
+    cable_capability_w: int,
+    pin_voltages_v: []float,
+    pin_currents_a: []float,
+    pin_power_w: []float,
+    input_temp_c: float,
+    output_temp_c: float,
+    external_1_present: bool,
+    external_1_temp_c: float,
+    external_2_present: bool,
+    external_2_temp_c: float,
+    active_fault_mask: int,
+    logged_fault_mask: int,
+    unknown_active_fault_mask: int,
+    unknown_logged_fault_mask: int,
+    active_faults: []string,
+    logged_faults: []string
+)
+
+method GetPollInterval() -> (
+    milliseconds: int
+)
+
+method SetPollInterval(
+    milliseconds: int
+) -> (
+    milliseconds: int
+)
+
+method PauseDisplay(
+    milliseconds: int
+) -> (
+    paused: bool,
+    debug_lease_active: bool,
+    history_dump_active: bool,
+    remaining_ms: int
+)
+
+method ResumeDisplay() -> (
+    paused: bool,
+    debug_lease_active: bool,
+    history_dump_active: bool,
+    remaining_ms: int
+)
+
+method GetConfiguration() -> (
+    configuration_json: string,
+    revision: string
+)
+
+method GetConfigurationItem(
+    key: string
+) -> (
+    key: string,
+    value_json: string
+)
+
+method ApplyConfiguration(
+    configuration: ConfigurationDto
+) -> (
+    configuration_json: string,
+    revision: string
+)
+
+method StoreConfiguration(
+    configuration: ConfigurationDto,
+    confirm: bool
+) -> (
+    configuration_json: string,
+    revision: string
+)
+
+method SetConfigurationItem(
+    key: string,
+    value: string,
+    persist: bool,
+    confirm: bool
+) -> (
+    key: string,
+    value_json: string
+)
+
+method ReloadConfiguration() -> (
+    configuration_json: string,
+    revision: string
+)
+
+method ResetConfiguration(
+    confirm: bool
+) -> (
+    configuration_json: string,
+    revision: string
+)
+
+method RebootDevice(
+    confirm: bool
+) -> (
+    accepted: bool
+)
+
+method Monitor() -> (
+    event: string,
+    sequence: int,
+    session_id: int,
+    port: ?string,
+    reason: ?string,
+    screen: ?string
+)
+
+error Unavailable(
+    message: string
+)
+
+error InvalidArgument(
+    message: string
+)
+
+error RevisionConflict(
+    message: string
+)
+
+error Busy(
+    message: string
+)
+
+error OperationOutcomeUnknown(
+    message: string
+)
+
+error VerificationFailed(
+    message: string
+)
+
+error FailedAndRolledBack(
+    message: string
+)
+
+error RollbackFailed(
+    message: string
+)
+
+error Unsupported(
+    message: string
+)
+
+error DeviceError(
+    message: string
+)

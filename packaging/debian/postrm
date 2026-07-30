@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl reset-failed wireviewd.service >/dev/null 2>&1 || true
+    systemctl reset-failed wireviewd.socket >/dev/null 2>&1 || true
+fi
+
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || true
+    for device in /sys/class/tty/ttyACM*; do
+        [ -e "$device" ] && udevadm trigger --action=add "$device" || true
+    done
+fi
+
+exit 0

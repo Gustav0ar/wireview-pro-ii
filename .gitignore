@@ -1,0 +1,13 @@
+/target/
+/dist/
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/corpus/
+*.deb
+*.rpm
+*.pkg.tar.*
+*.log
+*.swp
+*~
+.idea/
+.vscode/

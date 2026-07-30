@@ -1,0 +1,58 @@
+[package]
+name = "wireviewd"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.97.1"
+description = "Linux daemon and CLI for the Thermal Grizzly WireView Pro II"
+license = "MIT"
+authors = ["wireviewd contributors"]
+readme = "README.md"
+homepage = "https://github.com/Gustav0ar/wireview-pro-ii"
+repository = "https://github.com/Gustav0ar/wireview-pro-ii"
+keywords = ["wireview", "telemetry", "usb", "hardware", "daemon"]
+categories = ["command-line-utilities", "hardware-support"]
+publish = false
+
+[dependencies]
+async-trait = "0.1.89"
+clap = { version = "4.6.4", features = ["derive"] }
+clap_complete = "4.6.8"
+clap_mangen = "0.3.0"
+futures-util = "0.3.32"
+listenfd = "1.0.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+sha2 = "0.11.0"
+thiserror = "2.0.19"
+tokio = { version = "1.53.1", features = ["io-util", "macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-serial = "5.5.0"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
+udev = "0.9.3"
+zlink = { version = "=0.7.0", features = ["idl-parse"] }
+
+[dev-dependencies]
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "sync", "test-util", "time"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "allow"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 3
+overflow-checks = true
+panic = "abort"
+strip = "symbols"
+
+[[bin]]
+name = "wireviewd"
+path = "src/bin/wireviewd.rs"
+
+[[bin]]
+name = "wireview"
+path = "src/bin/wireview.rs"

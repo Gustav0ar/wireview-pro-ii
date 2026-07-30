@@ -1,0 +1,84 @@
+Name:           wireviewd
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Linux daemon for the Thermal Grizzly WireView Pro II
+License:        MIT
+URL:            @PROJECT_URL@
+
+Requires:       systemd
+Requires:       systemd-udev
+
+%global debug_package %{nil}
+
+%description
+wireviewd provides telemetry, device configuration, and verified screen control for the
+Thermal Grizzly WireView Pro II through a Varlink API and command-line client.
+
+%prep
+
+%build
+
+%install
+mkdir -p %{buildroot}
+cp -a @STAGE_ROOT@/. %{buildroot}/
+
+%post
+if command -v systemd-sysusers >/dev/null 2>&1; then
+    systemd-sysusers /usr/lib/sysusers.d/wireview.conf || :
+fi
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || :
+    for device in /sys/class/tty/ttyACM*; do
+        test -e "$device" && udevadm trigger --action=add "$device" || :
+    done
+fi
+if test -d /run/systemd/system; then
+    systemctl daemon-reload || :
+    systemctl preset wireviewd.socket >/dev/null 2>&1 || :
+    systemctl start wireviewd.socket || :
+    systemctl try-restart wireviewd.service >/dev/null 2>&1 || :
+fi
+
+%preun
+if test "$1" -eq 0 && test -d /run/systemd/system; then
+    systemctl disable --now wireviewd.socket >/dev/null 2>&1 || :
+    systemctl stop wireviewd.service >/dev/null 2>&1 || :
+fi
+
+%postun
+if test -d /run/systemd/system; then
+    systemctl daemon-reload || :
+    systemctl reset-failed wireviewd.service >/dev/null 2>&1 || :
+    systemctl reset-failed wireviewd.socket >/dev/null 2>&1 || :
+fi
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || :
+    for device in /sys/class/tty/ttyACM*; do
+        test -e "$device" && udevadm trigger --action=add "$device" || :
+    done
+fi
+%files
+%license /usr/share/licenses/wireviewd/LICENSE
+%doc /usr/share/doc/wireviewd/README.md
+%doc /usr/share/doc/wireviewd/protocol.md
+%doc /usr/share/doc/wireviewd/compatibility.md
+%doc /usr/share/doc/wireviewd/usage.md
+%doc /usr/share/doc/wireviewd/operations.md
+%doc /usr/share/doc/wireviewd/development.md
+%doc /usr/share/doc/wireviewd/varlink.md
+%doc /usr/share/doc/wireviewd/release-qualification.md
+%{_mandir}/man1/wireview.1*
+/usr/share/bash-completion/completions/wireview
+/usr/share/zsh/site-functions/_wireview
+/usr/share/fish/vendor_completions.d/wireview.fish
+/usr/bin/wireviewd
+/usr/bin/wireview
+/usr/lib/systemd/system/wireviewd.service
+/usr/lib/systemd/system/wireviewd.socket
+/usr/lib/sysusers.d/wireview.conf
+/usr/lib/udev/rules.d/70-wireview-pro-ii.rules
+/usr/share/varlink/interfaces/io.github.Gustav0ar.WireView.varlink
+
+%changelog
+* @RPM_DATE@ wireviewd contributors - @VERSION@-1
+- Initial package

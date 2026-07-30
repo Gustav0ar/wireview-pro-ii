@@ -1,0 +1,30 @@
+name: Fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  parsers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: nightly-2026-07-30
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libudev-dev
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Fuzz configuration parser
+        run: cargo fuzz run configuration -- -runs=20000 -max_len=4096
+      - name: Fuzz history parser
+        run: cargo fuzz run history -- -runs=20000 -max_len=65536
+      - name: Fuzz protocol parsers
+        run: cargo fuzz run protocol -- -runs=20000 -max_len=512
