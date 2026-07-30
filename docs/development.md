@@ -45,8 +45,9 @@ version.
 
 Every release includes the Debian, RPM, and Arch packages, SHA-256 checksums,
 an SPDX SBOM, a Sigstore bundle, provenance and SBOM attestations, and a
-generated changelog covering commits since the previous GitHub release. CI
-also cross-checks the build identity across all package formats before
+visible commit-by-commit changelog since the previous release tag. GitHub's
+generated pull-request and contributor notes are appended to that changelog.
+CI also cross-checks the build identity across all package formats before
 publishing.
 
 ## Verify a release
