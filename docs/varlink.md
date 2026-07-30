@@ -5,12 +5,17 @@ Unix socket `/run/wireviewd/io.github.Gustav0ar.WireView`. The packaged
 `wireviewd.socket` unit owns the listening socket and starts the daemon on the
 first connection.
 
-The implementation uses zlink 0.7.0 with its Tokio Unix transport. Standard
-`org.varlink.service` introspection remains available to Varlink clients.
+The implementation uses zlink 0.7.0 with its Tokio Unix transport.
 
 The complete standalone interface is checked in at
 [`interfaces/io.github.Gustav0ar.WireView.varlink`](../interfaces/io.github.Gustav0ar.WireView.varlink)
 and installed under `/usr/share/varlink/interfaces/`.
+
+Parameterless calls must omit the `parameters` member. Some older clients,
+including `varlinkctl` from systemd 255, always send `parameters: {}` and
+cannot call those methods or `org.varlink.service` introspection against zlink
+0.7.0. Parameterized calls work normally. Use the packaged CLI or a zlink
+client on those systems.
 
 ## Stability policy
 

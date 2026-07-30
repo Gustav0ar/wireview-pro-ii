@@ -89,21 +89,6 @@ grep -q 'state=absent' "${artifact_dir}/direct-reboot-status.out"
 stop_daemon
 
 start_daemon activation
-varlinkctl info "unix:${socket_path}" \
-  >"${artifact_dir}/varlink-info.out"
-varlinkctl list-methods \
-  "unix:${socket_path}" io.github.Gustav0ar.WireView \
-  >"${artifact_dir}/varlink-methods.out"
-grep -q 'RebootDevice' "${artifact_dir}/varlink-methods.out"
-for method in GetDeviceInfo ClearFaults BeginHistoryDump ReadHistoryDumpChunk \
-  EndHistoryDump GetPollInterval SetPollInterval PauseDisplay ResumeDisplay; do
-  grep -q "${method}" "${artifact_dir}/varlink-methods.out"
-done
-varlinkctl call \
-  "unix:${socket_path}" \
-  io.github.Gustav0ar.WireView.GetStatus \
-  '{}' \
-  >"${artifact_dir}/varlink-status.json"
 ./target/debug/wireview --socket "${socket_path}" telemetry --json \
   >"${artifact_dir}/telemetry.json"
 ./target/debug/wireview --socket "${socket_path}" telemetry \
@@ -467,18 +452,9 @@ jq -e '
 ' "${artifact_dir}/history.json" >/dev/null
 [[ "$(stat -c %s "${artifact_dir}/history.raw")" -eq 8388608 ]]
 
-grep -q 'Vendor: wireviewd contributors' "${artifact_dir}/varlink-info.out"
-jq -e '
-  .state == "ready"
-  and .session_id == 1
-  and .api_version == 1
-  and (.api_compatibility_id | test("^wireview-1-[0-9a-f]{16}$"))
-  and (.api_capabilities | index("history-dump") != null)
-  and (.api_capabilities | index("configuration-items") != null)
-  and (.daemon_version | length) > 0
-  and (.daemon_build_id | length) > 0
-' \
-  "${artifact_dir}/varlink-status.json" >/dev/null
+grep -Fq 'api=1' "${artifact_dir}/status.out"
+grep -Eq 'compatibility=wireview-1-[0-9a-f]{16}' \
+  "${artifact_dir}/status.out"
 
 jq -s -e '
   length == 4
