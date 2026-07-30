@@ -38,10 +38,16 @@ Source-only or intentionally dirty builds use
 `SOURCE_DATE_EPOCH`. Set `WIREVIEW_ALLOW_DIRTY=1` for an intentional dirty
 build, or provide a portable 1–64 character `WIREVIEW_BUILD_ID`.
 
-Tagged releases require the tag to equal `v` plus the Cargo version. CI
-cross-checks the build identity across package formats, publishes checksums and
-an SPDX SBOM, signs the checksum manifest with Sigstore, and publishes GitHub
-provenance and SBOM attestations.
+Changing the package version in `Cargo.toml` on `main` automatically creates
+the matching `v<version>` tag and runs the package workflow from that tag.
+Manually created tags remain supported and must equal `v` plus the Cargo
+version.
+
+Every release includes the Debian, RPM, and Arch packages, SHA-256 checksums,
+an SPDX SBOM, a Sigstore bundle, provenance and SBOM attestations, and a
+generated changelog covering commits since the previous GitHub release. CI
+also cross-checks the build identity across all package formats before
+publishing.
 
 ## Verify a release
 
