@@ -29,7 +29,9 @@ jobs:
   release-plan:
     runs-on: ubuntu-24.04
     outputs:
+      build_id: ${{ steps.plan.outputs.build_id }}
       mode: ${{ steps.plan.outputs.mode }}
+      source_epoch: ${{ steps.plan.outputs.source_epoch }}
       tag: ${{ steps.plan.outputs.tag }}
       version: ${{ steps.plan.outputs.version }}
     steps:
@@ -46,6 +48,10 @@ jobs:
             sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1
           )"
           test -n "${version}"
+          source_epoch="$(git show -s --format=%ct HEAD)"
+          build_id="git-$(git rev-parse --short=12 HEAD)-$(
+            date --utc --date="@${source_epoch}" '+%Y%m%d%H%M%S'
+          )"
 
           mode=build
           tag=
@@ -76,7 +82,9 @@ jobs:
           fi
 
           {
+            echo "build_id=${build_id}"
             echo "mode=${mode}"
+            echo "source_epoch=${source_epoch}"
             echo "tag=${tag}"
             echo "version=${version}"
           } >>"${GITHUB_OUTPUT}"
@@ -110,6 +118,9 @@ jobs:
       needs.release-plan.outputs.mode == 'release'
     needs: release-plan
     runs-on: ubuntu-24.04
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.release-plan.outputs.source_epoch }}
+      WIREVIEW_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
@@ -173,6 +184,9 @@ jobs:
     needs: release-plan
     runs-on: ubuntu-24.04
     container: fedora:43@sha256:762d73ba1c455232b0272c5d445a34f36c4b9f421cbc05ce8102552325b6a222
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.release-plan.outputs.source_epoch }}
+      WIREVIEW_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
     steps:
       - name: Install runner dependencies
         run: dnf install --assumeyes gcc git libudev-devel rpm-build
@@ -213,6 +227,9 @@ jobs:
     needs: release-plan
     runs-on: ubuntu-24.04
     container: archlinux:base-devel@sha256:33c534be6c990710a878b37192904dd448e162ade06a201d95a80b42be2110c7
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.release-plan.outputs.source_epoch }}
+      WIREVIEW_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
     steps:
       - name: Install runner dependencies
         run: pacman -Syu --noconfirm git rustup systemd
@@ -267,15 +284,15 @@ jobs:
           merge-multiple: true
       - name: Verify tag, version, and cross-package build identity
         env:
+          EXPECTED_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
           RELEASE_TAG: ${{ needs.release-plan.outputs.tag }}
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
           test "v${version}" = "${RELEASE_TAG}"
           test "${RELEASE_TAG}" = "${GITHUB_REF_NAME}"
-          expected_id="git-$(git rev-parse --short=12 HEAD)-$(date --utc --date="@$(git show -s --format=%ct HEAD)" '+%Y%m%d%H%M%S')"
           test "$(find release -maxdepth 1 -name '*.build-id' -type f | wc -l)" -eq 3
           test "$(cat release/*.build-id | sort -u | wc -l)" -eq 1
-          test "$(head -n 1 release/deb.build-id)" = "${expected_id}"
+          test "$(head -n 1 release/deb.build-id)" = "${EXPECTED_BUILD_ID}"
           rm release/*.build-id
       - name: Create checksums
         run: |
