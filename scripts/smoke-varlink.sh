@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 artifact_dir="$(mktemp -d)"
@@ -41,7 +41,6 @@ start_daemon() {
   local mode="${1:-direct}"
   if [[ "${mode}" == "activation" ]]; then
     systemd-socket-activate \
-      --now \
       --listen="${socket_path}" \
       --fdname=wireviewd \
       ./target/debug/wireviewd \
