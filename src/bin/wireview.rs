@@ -15,13 +15,16 @@ use futures_util::{StreamExt, pin_mut};
 use serde::{Deserialize, Serialize};
 use wireviewd::build_info::{API_CAPABILITIES, API_VERSION, BUILD_ID, VERSION};
 use wireviewd::config::{DeviceSettings, FaultKind};
-use wireviewd::history::{FLASH_LENGTH, HistoryEntry, MAX_CHUNK_SIZE, visit_history};
+use wireviewd::history::{FLASH_LENGTH, HistoryEntry, visit_history};
 use wireviewd::varlink::{
     ConfigurationDto, ConfigurationItemDto, DEFAULT_SOCKET_PATH, DeviceInfoDto, StatusDto,
     TelemetryDto, WireViewError, WireViewProxy,
 };
 
 const HISTORY_CLEANUP_TIMEOUT: Duration = Duration::from_secs(3);
+// Keep an abandoned Varlink reply small enough that the daemon can finish
+// serializing it and accept the explicit cleanup connection promptly.
+const HISTORY_CLIENT_CHUNK_SIZE: usize = 16 * 1024;
 const OUTPUT_WRITE_CHUNK: usize = 64 * 1024;
 static TEMPORARY_FILE_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -652,7 +655,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let mut bytes = Vec::with_capacity(expected_total);
                 while bytes.len() < expected_total {
-                    let length = (expected_total - bytes.len()).min(MAX_CHUNK_SIZE);
+                    let length = (expected_total - bytes.len()).min(HISTORY_CLIENT_CHUNK_SIZE);
                     let chunk = tokio::select! {
                         () = cancellation.requested() => {
                             interrupted = true;

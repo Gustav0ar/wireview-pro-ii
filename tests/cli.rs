@@ -371,7 +371,12 @@ fn ctrl_c_closes_an_active_history_dump_immediately() {
     let output = history
         .wait_with_output()
         .expect("history client output should be collected");
-    assert_eq!(output.status.code(), Some(130));
+    assert_eq!(
+        output.status.code(),
+        Some(130),
+        "unexpected history stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(
         String::from_utf8_lossy(&output.stderr)
             .contains("History dump interrupted; daemon state cleaned up.")
