@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Output, Stdio},
     thread,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 struct TestDaemon {
@@ -354,8 +354,9 @@ fn ctrl_c_closes_an_active_history_dump_immediately() {
         .expect("SIGINT should be sent");
     assert!(signal.success(), "SIGINT command failed");
 
+    let exit_deadline = Instant::now() + Duration::from_secs(5);
     let mut exited = false;
-    for _ in 0..200 {
+    while Instant::now() < exit_deadline {
         if history
             .try_wait()
             .expect("history process status should be readable")
