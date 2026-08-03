@@ -12,6 +12,7 @@ use zlink::tokio::notified::{self, traits::State as _};
 use crate::config::{DeviceConfiguration, DeviceSettings};
 use crate::domain::{ConnectionState, DeviceError, DeviceEvent, DeviceIdentity, Screen, Telemetry};
 use crate::manager::{ManagerHandle, configuration_revision};
+use crate::theme::{ThemeAssetSlot, sha256_hex};
 use crate::{build_info, build_info::API_VERSION};
 
 pub const INTERFACE_NAME: &str = "io.github.Gustav0ar.WireView";
@@ -199,6 +200,23 @@ pub struct HistoryDumpDto {
     pub dump_id: u64,
     pub session_id: u64,
     pub total_bytes: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, zlink::introspect::CustomType)]
+pub struct ThemeAssetDto {
+    pub slot: String,
+    pub width: u32,
+    pub height: u32,
+    pub byte_length: u32,
+    pub sha256: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, zlink::introspect::CustomType)]
+pub struct ThemeAssetWriteDto {
+    pub slot: String,
+    pub byte_length: u32,
+    pub sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, zlink::introspect::CustomType)]
@@ -433,7 +451,7 @@ impl From<DeviceError> for WireViewError {
     product = "wireviewd",
     version = env!("CARGO_PKG_VERSION"),
     url = "https://github.com/Gustav0ar/wireview-pro-ii",
-    types = [StatusDto, TelemetryDto, ScreenDto, RebootDeviceDto, HistoryChunkDto, HistoryDumpDto, ConfigurationDto, ConfigurationItemDto, DeviceInfoDto, PollIntervalDto, DisplayPauseDto, DeviceEventDto]
+    types = [StatusDto, TelemetryDto, ScreenDto, RebootDeviceDto, HistoryChunkDto, HistoryDumpDto, ThemeAssetDto, ThemeAssetWriteDto, ConfigurationDto, ConfigurationItemDto, DeviceInfoDto, PollIntervalDto, DisplayPauseDto, DeviceEventDto]
 )]
 impl<Sock> DeviceService
 where
@@ -529,6 +547,64 @@ where
     async fn end_history_dump(&self, dump_id: u64) -> Result<(), WireViewError> {
         self.manager.end_history_dump(dump_id).await?;
         Ok(())
+    }
+
+    async fn read_theme_asset(&self, slot: String) -> Result<ThemeAssetDto, WireViewError> {
+        let slot: ThemeAssetSlot = slot.parse()?;
+        let data = self.manager.read_theme_asset(slot).await?;
+        if data.len() != slot.byte_len() {
+            return Err(WireViewError::DeviceError {
+                message: format!(
+                    "device returned {} bytes for {slot}, expected {}",
+                    data.len(),
+                    slot.byte_len()
+                ),
+            });
+        }
+        Ok(ThemeAssetDto {
+            slot: slot.to_string(),
+            width: slot.width(),
+            height: slot.height(),
+            byte_length: u32::try_from(data.len()).expect("theme asset length fits u32"),
+            sha256: sha256_hex(&data),
+            data,
+        })
+    }
+
+    async fn write_theme_asset(
+        &self,
+        slot: String,
+        byte_length: u32,
+        sha256: String,
+        data: Vec<u8>,
+        confirm: bool,
+    ) -> Result<ThemeAssetWriteDto, WireViewError> {
+        require_confirmation(confirm, "writing a theme asset")?;
+        let slot: ThemeAssetSlot = slot.parse()?;
+        let supplied_length =
+            usize::try_from(byte_length).map_err(|_| WireViewError::InvalidArgument {
+                message: "theme asset byte length is too large".into(),
+            })?;
+        if supplied_length != data.len() || data.len() != slot.byte_len() {
+            return Err(WireViewError::InvalidArgument {
+                message: format!(
+                    "theme asset {slot} must be exactly {} bytes",
+                    slot.byte_len()
+                ),
+            });
+        }
+        let actual_sha256 = sha256_hex(&data);
+        if sha256 != actual_sha256 {
+            return Err(WireViewError::InvalidArgument {
+                message: "theme asset SHA-256 does not match its data".into(),
+            });
+        }
+        self.manager.write_theme_asset(slot, data).await?;
+        Ok(ThemeAssetWriteDto {
+            slot: slot.to_string(),
+            byte_length,
+            sha256: actual_sha256,
+        })
     }
 
     async fn get_device_info(&self) -> Result<DeviceInfoDto, WireViewError> {
@@ -673,7 +749,7 @@ where
     }
 }
 
-/// A deterministic fingerprint of the generated Varlink API 1 interface and its
+/// A deterministic fingerprint of the generated Varlink API interface and its
 /// semantic capability set. It changes automatically when either contract does.
 #[must_use]
 pub fn api_compatibility_id() -> &'static str {
@@ -710,7 +786,7 @@ mod compatibility_tests {
         let compatibility_id = api_compatibility_id();
         assert_eq!(compatibility_id, api_compatibility_id());
         let digest = compatibility_id
-            .strip_prefix("wireview-1-")
+            .strip_prefix("wireview-2-")
             .expect("API compatibility ID should contain the API version");
         assert_eq!(digest.len(), 16);
         assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -764,6 +840,20 @@ pub trait WireViewProxy {
     ) -> zlink::Result<Result<HistoryChunkDto, WireViewError>>;
 
     async fn end_history_dump(&mut self, dump_id: u64) -> zlink::Result<Result<(), WireViewError>>;
+
+    async fn read_theme_asset(
+        &mut self,
+        slot: &str,
+    ) -> zlink::Result<Result<ThemeAssetDto, WireViewError>>;
+
+    async fn write_theme_asset(
+        &mut self,
+        slot: &str,
+        byte_length: u32,
+        sha256: &str,
+        data: Vec<u8>,
+        confirm: bool,
+    ) -> zlink::Result<Result<ThemeAssetWriteDto, WireViewError>>;
 
     async fn get_device_info(&mut self) -> zlink::Result<Result<DeviceInfoDto, WireViewError>>;
 

@@ -1,10 +1,11 @@
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-use crate::backend::DeviceBackend;
+use crate::backend::{DeviceBackend, ReadCancellation};
 use crate::config::{DeviceConfiguration, DeviceSettings, NvmOperation, encode_configuration};
 use crate::domain::{
     ConnectionState, DaemonState, DeviceError, DeviceEvent, DeviceIdentity, DisconnectReason,
@@ -12,8 +13,12 @@ use crate::domain::{
 };
 use crate::history::FLASH_LENGTH;
 use crate::protocol::KNOWN_FAULT_MASK;
+use crate::theme::ThemeAssetSlot;
 
 const MIN_NVM_MUTATION_INTERVAL: Duration = Duration::from_secs(1);
+const DISPLAY_RESUME_RETRY_DELAY: Duration = Duration::from_secs(1);
+
+type ActiveHistoryCancellation = Arc<Mutex<Option<(u64, ReadCancellation)>>>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HostEvent {
@@ -30,6 +35,15 @@ enum Command {
         offset: usize,
         length: usize,
         reply: oneshot::Sender<Result<Vec<u8>, DeviceError>>,
+    },
+    ReadThemeAsset {
+        slot: ThemeAssetSlot,
+        reply: oneshot::Sender<Result<Vec<u8>, DeviceError>>,
+    },
+    WriteThemeAsset {
+        slot: ThemeAssetSlot,
+        data: Box<[u8]>,
+        reply: oneshot::Sender<Result<(), DeviceError>>,
     },
     BeginHistoryDump {
         reply: oneshot::Sender<Result<HistoryDump, DeviceError>>,
@@ -133,10 +147,20 @@ pub struct ManagerHandle {
     command_tx: mpsc::Sender<Command>,
     state_rx: watch::Receiver<DaemonState>,
     event_tx: broadcast::Sender<DeviceEvent>,
+    history_cancellation: ActiveHistoryCancellation,
 }
 
 impl ManagerHandle {
     pub async fn observe(&self, event: HostEvent) -> Result<(), DeviceError> {
+        if event == HostEvent::Shutdown
+            && let Some((_, cancellation)) = self
+                .history_cancellation
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_ref()
+        {
+            cancellation.cancel();
+        }
         self.host_tx
             .send(event)
             .await
@@ -184,6 +208,32 @@ impl ManagerHandle {
         response.await.map_err(|_| DeviceError::ManagerStopped)?
     }
 
+    pub async fn read_theme_asset(&self, slot: ThemeAssetSlot) -> Result<Vec<u8>, DeviceError> {
+        let (reply, response) = oneshot::channel();
+        self.command_tx
+            .send(Command::ReadThemeAsset { slot, reply })
+            .await
+            .map_err(|_| DeviceError::ManagerStopped)?;
+        response.await.map_err(|_| DeviceError::ManagerStopped)?
+    }
+
+    pub async fn write_theme_asset(
+        &self,
+        slot: ThemeAssetSlot,
+        data: Vec<u8>,
+    ) -> Result<(), DeviceError> {
+        let (reply, response) = oneshot::channel();
+        self.command_tx
+            .send(Command::WriteThemeAsset {
+                slot,
+                data: data.into_boxed_slice(),
+                reply,
+            })
+            .await
+            .map_err(|_| DeviceError::ManagerStopped)?;
+        response.await.map_err(|_| DeviceError::ManagerStopped)?
+    }
+
     pub async fn begin_history_dump(&self) -> Result<HistoryDump, DeviceError> {
         let (reply, response) = oneshot::channel();
         self.command_tx
@@ -213,6 +263,15 @@ impl ManagerHandle {
     }
 
     pub async fn end_history_dump(&self, dump_id: u64) -> Result<(), DeviceError> {
+        if let Some((_, cancellation)) = self
+            .history_cancellation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .filter(|(active_id, _)| *active_id == dump_id)
+        {
+            cancellation.cancel();
+        }
         let (reply, response) = oneshot::channel();
         self.command_tx
             .send(Command::EndHistoryDump { dump_id, reply })
@@ -408,11 +467,13 @@ pub fn spawn_manager<B: DeviceBackend>(
     let (command_tx, command_rx) = mpsc::channel(32);
     let (state_tx, state_rx) = watch::channel(DaemonState::default());
     let (event_tx, _) = broadcast::channel(64);
+    let history_cancellation = Arc::new(Mutex::new(None));
     let handle = ManagerHandle {
         host_tx,
         command_tx,
         state_rx,
         event_tx: event_tx.clone(),
+        history_cancellation: history_cancellation.clone(),
     };
     let task = tokio::spawn(
         Manager {
@@ -431,6 +492,8 @@ pub fn spawn_manager<B: DeviceBackend>(
             next_history_dump_id: 0,
             debug_pause_expires_at: None,
             display_physically_paused: false,
+            display_resume_retry_at: None,
+            history_cancellation,
             last_nvm_mutation: None,
         }
         .run(),
@@ -454,6 +517,8 @@ struct Manager<B> {
     next_history_dump_id: u64,
     debug_pause_expires_at: Option<Instant>,
     display_physically_paused: bool,
+    display_resume_retry_at: Option<Instant>,
+    history_cancellation: ActiveHistoryCancellation,
     last_nvm_mutation: Option<Instant>,
 }
 
@@ -467,6 +532,7 @@ struct ActiveHistoryDump {
     id: u64,
     session_id: u64,
     expires_at: Instant,
+    cancellation: ReadCancellation,
 }
 
 impl<B: DeviceBackend> Manager<B> {
@@ -480,6 +546,7 @@ impl<B: DeviceBackend> Manager<B> {
                 .map(|dump| dump.expires_at)
                 .into_iter()
                 .chain(self.debug_pause_expires_at)
+                .chain(self.display_resume_retry_at)
                 .min()
             {
                 wake_at = wake_at.min(expires_at);
@@ -488,6 +555,7 @@ impl<B: DeviceBackend> Manager<B> {
                 _ = tokio::time::sleep_until(wake_at) => {
                     self.expire_history_dump().await;
                     self.expire_debug_pause().await;
+                    self.retry_display_resume_cleanup().await;
                     if Instant::now() >= next_poll {
                         self.poll_once().await;
                         next_poll = Instant::now() + self.poll_interval;
@@ -563,8 +631,10 @@ impl<B: DeviceBackend> Manager<B> {
                     self.consecutive_poll_failures = 0;
                     self.last_successful_poll = Some(Instant::now());
                     self.active_history_dump = None;
+                    self.clear_history_cancellation(None);
                     self.debug_pause_expires_at = None;
                     self.display_physically_paused = false;
+                    self.display_resume_retry_at = None;
                     self.retry = None;
                     self.bump_and_publish();
                     let _ = self.event_tx.send(DeviceEvent::Connected {
@@ -582,8 +652,10 @@ impl<B: DeviceBackend> Manager<B> {
     async fn connection_failed(&mut self, port: &str, error: DeviceError) {
         self.backend.disconnect().await;
         self.active_history_dump = None;
+        self.clear_history_cancellation(None);
         self.debug_pause_expires_at = None;
         self.display_physically_paused = false;
+        self.display_resume_retry_at = None;
         self.consecutive_poll_failures = 0;
         self.last_successful_poll = None;
         self.current_port = None;
@@ -666,8 +738,10 @@ impl<B: DeviceBackend> Manager<B> {
         self.bump_and_publish();
         self.backend.disconnect().await;
         self.active_history_dump = None;
+        self.clear_history_cancellation(None);
         self.debug_pause_expires_at = None;
         self.display_physically_paused = false;
+        self.display_resume_retry_at = None;
         self.current_port = None;
         self.state.connected_port = None;
         if let Some(telemetry) = &mut self.state.telemetry {
@@ -742,6 +816,7 @@ impl<B: DeviceBackend> Manager<B> {
         }
         tracing::warn!(dump_id = dump.id, "history dump lease expired");
         self.active_history_dump = None;
+        self.clear_history_cancellation(None);
         let result = self.resume_display_if_unowned().await;
         match result {
             Ok(()) => self.set_ready(),
@@ -781,6 +856,7 @@ impl<B: DeviceBackend> Manager<B> {
         }
         self.backend.pause_history_updates().await?;
         self.display_physically_paused = true;
+        self.display_resume_retry_at = None;
         Ok(())
     }
 
@@ -789,11 +865,67 @@ impl<B: DeviceBackend> Manager<B> {
             || self.debug_pause_expires_at.is_some()
             || !self.display_physically_paused
         {
+            self.display_resume_retry_at = None;
             return Ok(());
         }
-        self.backend.resume_history_updates().await?;
-        self.display_physically_paused = false;
-        Ok(())
+        match self.backend.resume_history_updates().await {
+            Ok(()) => {
+                self.display_physically_paused = false;
+                self.display_resume_retry_at = None;
+                Ok(())
+            }
+            Err(error) => {
+                if error != DeviceError::ConnectionLost {
+                    self.display_resume_retry_at =
+                        Some(Instant::now() + DISPLAY_RESUME_RETRY_DELAY);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    async fn retry_display_resume_cleanup(&mut self) {
+        let Some(retry_at) = self.display_resume_retry_at else {
+            return;
+        };
+        if Instant::now() < retry_at
+            || !matches!(self.state.connection, ConnectionState::Ready { .. })
+        {
+            return;
+        }
+        if self.active_history_dump.is_some()
+            || self.debug_pause_expires_at.is_some()
+            || !self.display_physically_paused
+        {
+            self.display_resume_retry_at = None;
+            return;
+        }
+        match self.resume_display_if_unowned().await {
+            Ok(()) => {
+                tracing::info!("display-resume cleanup succeeded after retry");
+                self.bump_and_publish();
+            }
+            Err(DeviceError::ConnectionLost) => {
+                self.disconnect(DisconnectReason::SerialHangup).await;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "display-resume cleanup retry failed");
+            }
+        }
+    }
+
+    fn clear_history_cancellation(&self, dump_id: Option<u64>) {
+        let mut active = self
+            .history_cancellation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if dump_id.is_none()
+            || active
+                .as_ref()
+                .is_some_and(|(active_id, _)| Some(*active_id) == dump_id)
+        {
+            *active = None;
+        }
     }
 
     fn display_pause_state(&self) -> DisplayPauseState {
@@ -857,10 +989,17 @@ impl<B: DeviceBackend> Manager<B> {
                             session_id: self.state.session_id,
                             total_bytes: FLASH_LENGTH,
                         };
+                        let cancellation = ReadCancellation::default();
+                        *self
+                            .history_cancellation
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                            Some((dump.id, cancellation.clone()));
                         self.active_history_dump = Some(ActiveHistoryDump {
                             id: dump.id,
                             session_id: dump.session_id,
                             expires_at: Instant::now() + Duration::from_secs(10),
+                            cancellation,
                         });
                         self.set_busy("reading_device_history");
                         let _ = reply.send(Ok(dump));
@@ -893,7 +1032,19 @@ impl<B: DeviceBackend> Manager<B> {
                     return;
                 }
                 dump.expires_at = Instant::now() + Duration::from_secs(10);
-                match self.backend.read_history_chunk(offset, length).await {
+                let cancellation = dump.cancellation.clone();
+                let expires_at = dump.expires_at;
+                let lease_cancellation = cancellation.clone();
+                let lease_timer = tokio::spawn(async move {
+                    tokio::time::sleep_until(expires_at).await;
+                    lease_cancellation.cancel();
+                });
+                let result = self
+                    .backend
+                    .read_history_chunk(offset, length, &cancellation)
+                    .await;
+                lease_timer.abort();
+                match result {
                     Ok(bytes) => {
                         let _ = reply.send(Ok(bytes));
                     }
@@ -920,6 +1071,7 @@ impl<B: DeviceBackend> Manager<B> {
                     return;
                 }
                 self.active_history_dump = None;
+                self.clear_history_cancellation(Some(dump_id));
                 match self.resume_display_if_unowned().await {
                     Ok(()) => {
                         self.set_ready();
@@ -949,9 +1101,13 @@ impl<B: DeviceBackend> Manager<B> {
                     operation: "reading_device_history".into(),
                 };
                 self.bump_and_publish();
+                let cancellation = ReadCancellation::default();
                 let result = match self.ensure_display_paused().await {
                     Ok(()) => {
-                        let read = self.backend.read_history_chunk(offset, length).await;
+                        let read = self
+                            .backend
+                            .read_history_chunk(offset, length, &cancellation)
+                            .await;
                         let resume = self.resume_display_if_unowned().await;
                         match (read, resume) {
                             (Ok(bytes), Ok(())) => Ok(bytes),
@@ -980,6 +1136,92 @@ impl<B: DeviceBackend> Manager<B> {
                         let _ = reply.send(Err(error));
                     }
                 }
+            }
+            Command::ReadThemeAsset { slot, reply } => {
+                if !matches!(self.state.connection, ConnectionState::Ready { .. }) {
+                    let error = if self.active_history_dump.is_some() {
+                        DeviceError::Busy("a history dump is active".into())
+                    } else {
+                        DeviceError::NotConnected
+                    };
+                    let _ = reply.send(Err(error));
+                    return;
+                }
+                self.set_busy("reading_theme_asset");
+                if let Err(error) = self.ensure_display_paused().await {
+                    if error == DeviceError::ConnectionLost {
+                        self.disconnect(DisconnectReason::SerialHangup).await;
+                    } else {
+                        self.set_ready();
+                    }
+                    let _ = reply.send(Err(error));
+                    return;
+                }
+
+                let read = self.backend.read_theme_asset(slot).await;
+                let resume = self.resume_display_if_unowned().await;
+                if let Err(error) = &resume {
+                    tracing::warn!(%error, "failed to resume display after theme read");
+                }
+                let connection_lost = matches!(&read, Err(DeviceError::ConnectionLost))
+                    || matches!(&resume, Err(DeviceError::ConnectionLost));
+                if connection_lost {
+                    self.disconnect(DisconnectReason::SerialHangup).await;
+                } else {
+                    self.set_ready();
+                }
+                // A cleanup failure does not invalidate bytes already read.
+                // Connection loss is reflected in daemon state independently.
+                let _ = reply.send(read);
+            }
+            Command::WriteThemeAsset { slot, data, reply } => {
+                if !matches!(self.state.connection, ConnectionState::Ready { .. }) {
+                    let error = if self.active_history_dump.is_some() {
+                        DeviceError::Busy("a history dump is active".into())
+                    } else {
+                        DeviceError::NotConnected
+                    };
+                    let _ = reply.send(Err(error));
+                    return;
+                }
+                self.set_busy("writing_theme_asset");
+                if let Err(error) = self.ensure_display_paused().await {
+                    if error == DeviceError::ConnectionLost {
+                        self.disconnect(DisconnectReason::SerialHangup).await;
+                    } else {
+                        self.set_ready();
+                    }
+                    // Pausing precedes every SPI operation, so its failure
+                    // cannot make the flash outcome ambiguous.
+                    let _ = reply.send(Err(error));
+                    return;
+                }
+
+                let write = self.backend.write_theme_asset(slot, &data).await;
+                let resume = self.resume_display_if_unowned().await;
+                if let Err(error) = &resume {
+                    tracing::warn!(%error, "failed to resume display after theme write");
+                }
+                let connection_lost = matches!(
+                    &write,
+                    Err(DeviceError::ConnectionLost | DeviceError::ConnectionLostBeforeMutation)
+                ) || matches!(&resume, Err(DeviceError::ConnectionLost));
+                if connection_lost {
+                    self.disconnect(DisconnectReason::SerialHangup).await;
+                } else {
+                    self.set_ready();
+                }
+
+                let result = match write {
+                    Err(DeviceError::ConnectionLost) => Err(DeviceError::OperationOutcomeUnknown),
+                    Err(DeviceError::ConnectionLostBeforeMutation) => {
+                        Err(DeviceError::ConnectionLost)
+                    }
+                    result => result,
+                };
+                // Resume failure is lifecycle state, not flash outcome. A
+                // verified commit or rollback remains authoritative.
+                let _ = reply.send(result);
             }
             Command::ReadDeviceInfo { reply } => {
                 if !matches!(self.state.connection, ConnectionState::Ready { .. }) {

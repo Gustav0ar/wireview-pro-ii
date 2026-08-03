@@ -69,6 +69,21 @@ type HistoryDumpDto(
     total_bytes: int
 )
 
+type ThemeAssetDto(
+    slot: string,
+    width: int,
+    height: int,
+    byte_length: int,
+    sha256: string,
+    data: []int
+)
+
+type ThemeAssetWriteDto(
+    slot: string,
+    byte_length: int,
+    sha256: string
+)
+
 type ConfigurationDto(
     configuration_json: string,
     revision: string
@@ -194,6 +209,29 @@ method ReadHistoryDumpChunk(
 method EndHistoryDump(
     dump_id: int
 ) -> ()
+
+method ReadThemeAsset(
+    slot: string
+) -> (
+    slot: string,
+    width: int,
+    height: int,
+    byte_length: int,
+    sha256: string,
+    data: []int
+)
+
+method WriteThemeAsset(
+    slot: string,
+    byte_length: int,
+    sha256: string,
+    data: []int,
+    confirm: bool
+) -> (
+    slot: string,
+    byte_length: int,
+    sha256: string
+)
 
 method GetDeviceInfo() -> (
     unique_id: string,

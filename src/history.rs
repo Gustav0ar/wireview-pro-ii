@@ -138,21 +138,36 @@ fn walk_history<E>(
             }
 
             empty_run = 0;
-            let kind = match encoded & 0b11 {
-                0 => HistoryEntryKind::Measurement,
-                2 => HistoryEntryKind::PowerOn,
+            match encoded & 0b11 {
+                0 => {
+                    if record[20] > 3 {
+                        slot += 1;
+                        continue;
+                    }
+
+                    // A structurally valid measurement starts the recorded
+                    // region even when its voltages reveal a partial/corrupt
+                    // write. This matches the device parser's traversal rules.
+                    found_first = true;
+                    let voltage_sum: usize = record[8..14]
+                        .iter()
+                        .map(|&voltage| usize::from(voltage))
+                        .sum();
+                    if voltage_sum > 60 && voltage_sum < 900 {
+                        on_entry(record, encoded, HistoryEntryKind::Measurement)?;
+                    }
+                    slot += 1;
+                }
+                2 => {
+                    // POWER_ON is a boundary marker. Its sensor payload is not
+                    // a measurement and must never be decoded as one.
+                    found_first = true;
+                    slot += 1;
+                }
                 _ => {
                     slot += 1;
-                    continue;
                 }
-            };
-            if record[20] > 3 {
-                slot += 1;
-                continue;
             }
-            on_entry(record, encoded, kind)?;
-            found_first = true;
-            slot += 1;
         }
     }
 
@@ -265,13 +280,74 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_power_on_and_ignores_other_record_types() {
+    fn power_on_marks_the_log_start_but_is_not_a_measurement() {
         let mut data = vec![0xff; FLASH_SECTOR_SIZE];
         data[..ENTRY_SIZE].copy_from_slice(&entry(1, 1));
-        data[ENTRY_SIZE..ENTRY_SIZE * 2].copy_from_slice(&entry(2, 2));
+        let mut power_on = entry(2, 2);
+        power_on[8..].fill(0);
+        power_on[20] = u8::MAX;
+        data[ENTRY_SIZE..ENTRY_SIZE * 2].copy_from_slice(&power_on);
+        let parsed = parse_history(&data);
+        assert!(parsed.entries.is_empty());
+        assert!(parsed.end_found);
+    }
+
+    #[test]
+    fn rejects_unknown_cable_capability() {
+        let mut data = vec![0xff; FLASH_SECTOR_SIZE];
+        let mut accepted = entry(0, 1);
+        accepted[20] = 3;
+        data[..ENTRY_SIZE].copy_from_slice(&accepted);
+        let mut rejected = entry(0, 2);
+        rejected[20] = 4;
+        data[ENTRY_SIZE..ENTRY_SIZE * 2].copy_from_slice(&rejected);
+
         let parsed = parse_history(&data);
         assert_eq!(parsed.entries.len(), 1);
-        assert_eq!(parsed.entries[0].kind, HistoryEntryKind::PowerOn);
+        assert_eq!(parsed.entries[0].device_time_ms, 1);
+        assert_eq!(parsed.entries[0].kind, HistoryEntryKind::Measurement);
+    }
+
+    #[test]
+    fn voltage_plausibility_bounds_are_strict() {
+        let mut data = vec![0xff; FLASH_SECTOR_SIZE];
+        for (index, sum) in [60_u16, 61, 899, 900].into_iter().enumerate() {
+            let mut record = entry(0, u32::try_from(index).unwrap());
+            record[8..14].fill(0);
+            record[8] = u8::try_from(sum.min(255)).unwrap();
+            record[9] = u8::try_from(sum.saturating_sub(255).min(255)).unwrap();
+            record[10] = u8::try_from(sum.saturating_sub(510).min(255)).unwrap();
+            record[11] = u8::try_from(sum.saturating_sub(765).min(255)).unwrap();
+            data[index * ENTRY_SIZE..(index + 1) * ENTRY_SIZE].copy_from_slice(&record);
+        }
+
+        let parsed = parse_history(&data);
+        assert_eq!(
+            parsed
+                .entries
+                .iter()
+                .map(|entry| entry.device_time_ms)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert!(
+            parsed
+                .entries
+                .iter()
+                .all(|entry| entry.kind == HistoryEntryKind::Measurement)
+        );
+    }
+
+    #[test]
+    fn rejected_voltage_sample_still_enables_erased_run_termination() {
+        let mut data = vec![0xff; FLASH_SECTOR_SIZE];
+        let mut rejected = entry(0, 1);
+        rejected[8..14].fill(10);
+        data[..ENTRY_SIZE].copy_from_slice(&rejected);
+
+        let parsed = parse_history(&data);
+        assert!(parsed.entries.is_empty());
+        assert!(parsed.end_found);
     }
 
     #[test]
