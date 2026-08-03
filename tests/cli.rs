@@ -269,6 +269,7 @@ fn ctrl_c_closes_an_active_history_dump_immediately() {
         child: Command::new(env!("CARGO_BIN_EXE_wireviewd"))
             .args([
                 "--mock",
+                "--mock-stall-history",
                 "--socket",
                 socket
                     .to_str()
@@ -328,25 +329,17 @@ fn ctrl_c_closes_an_active_history_dump_immediately() {
         .spawn()
         .expect("history client should start");
 
-    let mut dump_started = false;
-    for _ in 0..200 {
-        if let Ok(output) = status()
-            && output.status.success()
-            && String::from_utf8_lossy(&output.stdout).contains("display_paused=true")
-        {
-            dump_started = true;
-            break;
-        }
-        assert!(
-            history
-                .try_wait()
-                .expect("history process status should be readable")
-                .is_none(),
-            "history dump finished before it could be interrupted"
-        );
-        thread::sleep(Duration::from_millis(5));
-    }
-    assert!(dump_started, "history dump did not become active");
+    // The test daemon deliberately stalls its first read. Avoid querying status
+    // here because status is serialized through the same device manager; the
+    // cleanup request itself is the operation that must cancel that read.
+    thread::sleep(Duration::from_millis(50));
+    assert!(
+        history
+            .try_wait()
+            .expect("history process status should be readable")
+            .is_none(),
+        "history dump finished before it could be interrupted"
+    );
 
     let signal = Command::new("kill")
         .args(["-INT", &history.id().to_string()])
@@ -570,4 +563,151 @@ fn destructive_configuration_commands_require_confirmation_before_connecting() {
         String::from_utf8(set.stderr).expect("error should be UTF-8"),
         "permanent item storage requires --yes\n"
     );
+}
+
+#[test]
+fn theme_commands_document_slots_and_reject_unsafe_writes_locally() {
+    let help = wireview(&["theme", "--help"]);
+    assert!(help.status.success(), "{help:?}");
+    let help = String::from_utf8(help.stdout).expect("help should be UTF-8");
+    assert!(help.contains("read"));
+    assert!(help.contains("write"));
+
+    let read_help = wireview(&["theme", "read", "--help"]);
+    assert!(read_help.status.success(), "{read_help:?}");
+    let read_help = String::from_utf8(read_help.stdout).expect("help should be UTF-8");
+    for slot in [
+        "background-orange",
+        "background-dark",
+        "fan-orange-1",
+        "fan-orange-2",
+        "fan-dark-1",
+        "fan-dark-2",
+        "fan-black-white-1",
+        "fan-black-white-2",
+    ] {
+        assert!(read_help.contains(slot), "theme help omitted {slot:?}");
+    }
+    assert!(read_help.contains("--output"));
+
+    let missing_confirmation = wireview(&[
+        "--socket",
+        "/tmp/wireviewd-definitely-not-running.sock",
+        "theme",
+        "write",
+        "fan-dark-1",
+        "/tmp/wireview-theme-that-does-not-exist.raw",
+    ]);
+    assert!(!missing_confirmation.status.success());
+    assert_eq!(
+        String::from_utf8(missing_confirmation.stderr).expect("error should be UTF-8"),
+        "theme asset write requires --yes\n"
+    );
+
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system clock should follow the Unix epoch")
+        .as_nanos();
+    let input = std::env::temp_dir().join(format!(
+        "wireview-theme-short-{}-{unique}.raw",
+        std::process::id()
+    ));
+    fs::write(&input, b"too short").expect("short theme fixture should be written");
+    let wrong_length = wireview(&[
+        "--socket",
+        "/tmp/wireviewd-definitely-not-running.sock",
+        "theme",
+        "write",
+        "fan-dark-1",
+        input.to_str().expect("temporary path should be UTF-8"),
+        "--yes",
+    ]);
+    fs::remove_file(input).expect("short theme fixture should be removed");
+    assert!(!wrong_length.status.success());
+    let error = String::from_utf8(wrong_length.stderr).expect("error should be UTF-8");
+    assert!(error.contains("must be exactly 10658 bytes"), "{error}");
+    assert!(!error.contains("wireviewd socket"), "{error}");
+}
+
+#[test]
+fn theme_assets_round_trip_through_the_mock_daemon() {
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system clock should follow the Unix epoch")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "wireview-theme-roundtrip-{}-{unique}",
+        std::process::id()
+    ));
+    fs::create_dir(&root).expect("temporary test directory should be created");
+    let socket = root.join("wireview.sock");
+    let input = root.join("background.raw");
+    let output = root.join("background-readback.raw");
+    let daemon = TestDaemon {
+        child: Command::new(env!("CARGO_BIN_EXE_wireviewd"))
+            .args([
+                "--mock",
+                "--socket",
+                socket
+                    .to_str()
+                    .expect("temporary socket path should be UTF-8"),
+                "--discovery-ms",
+                "10",
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("mock daemon should start"),
+        root,
+    };
+
+    let socket = socket
+        .to_str()
+        .expect("temporary socket path should be UTF-8");
+    let mut ready = false;
+    for _ in 0..200 {
+        let status = wireview(&["--socket", socket, "status"]);
+        if status.status.success()
+            && String::from_utf8_lossy(&status.stdout).contains("state=ready")
+        {
+            ready = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(ready, "mock daemon did not become ready");
+
+    // Exercise the largest Varlink payload, not only the much smaller fan
+    // frames, so message-size regressions are caught end to end.
+    let expected: Vec<u8> = (0..108_800).map(|index| (index % 251) as u8).collect();
+    fs::write(&input, &expected).expect("theme fixture should be written");
+    let write = wireview(&[
+        "--socket",
+        socket,
+        "theme",
+        "write",
+        "background-dark",
+        input.to_str().expect("temporary path should be UTF-8"),
+        "--yes",
+    ]);
+    assert!(write.status.success(), "{write:?}");
+    assert!(String::from_utf8_lossy(&write.stdout).contains("verified"));
+
+    let read = wireview(&[
+        "--socket",
+        socket,
+        "theme",
+        "read",
+        "background-dark",
+        "--output",
+        output.to_str().expect("temporary path should be UTF-8"),
+    ]);
+    assert!(read.status.success(), "{read:?}");
+    assert!(String::from_utf8_lossy(&read.stdout).contains("SHA-256"));
+    assert_eq!(
+        fs::read(output).expect("theme readback should exist"),
+        expected
+    );
+
+    drop(daemon);
 }

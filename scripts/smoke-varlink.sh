@@ -97,6 +97,49 @@ start_daemon activation
   >"${artifact_dir}/device-info.json"
 ./target/debug/wireview --socket "${socket_path}" faults --json \
   >"${artifact_dir}/faults.json"
+./target/debug/wireview --socket "${socket_path}" theme read fan-dark-1 \
+  --output "${artifact_dir}/theme-original.rgb565" \
+  >"${artifact_dir}/theme-read.out"
+if varlinkctl call \
+  "unix:${socket_path}" \
+  io.github.Gustav0ar.WireView.WriteThemeAsset \
+  '{"slot":"fan-dark-1","byte_length":0,"sha256":"","data":[],"confirm":false}' \
+  >"${artifact_dir}/theme-unconfirmed.out" 2>&1; then
+  echo "unconfirmed theme write unexpectedly succeeded" >&2
+  exit 1
+fi
+jq -cn '{slot:"fan-dark-1",byte_length:10658,sha256:"bad",data:[range(0;10658)|0],confirm:true}' \
+  >"${artifact_dir}/theme-bad-digest-request.json"
+if varlinkctl call \
+  "unix:${socket_path}" \
+  io.github.Gustav0ar.WireView.WriteThemeAsset \
+  "$(cat "${artifact_dir}/theme-bad-digest-request.json")" \
+  >"${artifact_dir}/theme-bad-digest.out" 2>&1; then
+  echo "theme write with a bad digest unexpectedly succeeded" >&2
+  exit 1
+fi
+./target/debug/wireview --socket "${socket_path}" theme read fan-dark-1 \
+  --output "${artifact_dir}/theme-after-rejections.rgb565" \
+  >"${artifact_dir}/theme-after-rejections.out"
+cmp "${artifact_dir}/theme-original.rgb565" \
+  "${artifact_dir}/theme-after-rejections.rgb565"
+head -c 10658 /dev/zero >"${artifact_dir}/theme-replacement.rgb565"
+./target/debug/wireview --socket "${socket_path}" theme write fan-dark-1 \
+  "${artifact_dir}/theme-replacement.rgb565" --yes \
+  >"${artifact_dir}/theme-write.out"
+./target/debug/wireview --socket "${socket_path}" theme read fan-dark-1 \
+  --output "${artifact_dir}/theme-readback.rgb565" \
+  >"${artifact_dir}/theme-readback.out"
+cmp "${artifact_dir}/theme-replacement.rgb565" \
+  "${artifact_dir}/theme-readback.rgb565"
+./target/debug/wireview --socket "${socket_path}" theme write fan-dark-1 \
+  "${artifact_dir}/theme-original.rgb565" --yes \
+  >"${artifact_dir}/theme-restore.out"
+./target/debug/wireview --socket "${socket_path}" theme read fan-dark-1 \
+  --output "${artifact_dir}/theme-restored.rgb565" \
+  >"${artifact_dir}/theme-restored.out"
+cmp "${artifact_dir}/theme-original.rgb565" \
+  "${artifact_dir}/theme-restored.rgb565"
 ./target/debug/wireview --socket "${socket_path}" debug poll-interval \
   >"${artifact_dir}/poll-original.out"
 ./target/debug/wireview --socket "${socket_path}" debug poll-interval 250 \
@@ -452,8 +495,8 @@ jq -e '
 ' "${artifact_dir}/history.json" >/dev/null
 [[ "$(stat -c %s "${artifact_dir}/history.raw")" -eq 8388608 ]]
 
-grep -Fq 'api=1' "${artifact_dir}/status.out"
-grep -Eq 'compatibility=wireview-1-[0-9a-f]{16}' \
+grep -Fq 'api=2' "${artifact_dir}/status.out"
+grep -Eq 'compatibility=wireview-2-[0-9a-f]{16}' \
   "${artifact_dir}/status.out"
 
 jq -s -e '

@@ -2,10 +2,12 @@ use std::time::Duration;
 
 use tokio::time::timeout;
 use wireviewd::{
-    ConnectionState, DeviceError, DeviceEvent, DisconnectReason, HostEvent, MockBackend, Screen,
-    config::{DeviceSettings, NvmOperation},
+    ConnectionState, DeviceError, DeviceEvent, DisconnectReason, HostEvent, MockBackend,
+    MockDisplayResumeFailure, MockThemeWriteFailure, Screen,
+    config::{DeviceConfiguration, DeviceSettings, NvmOperation},
     history::{FLASH_LENGTH, FLASH_SECTOR_SIZE, parse_history},
     spawn_manager,
+    theme::ThemeAssetSlot,
 };
 
 async fn wait_for_state(
@@ -663,6 +665,86 @@ async fn history_dump_pauses_once_and_is_bound_to_its_session() {
 }
 
 #[tokio::test]
+async fn ending_a_history_dump_cancels_an_in_flight_read_and_resumes_display() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let dump = manager.begin_history_dump().await.unwrap();
+    let dump_id = dump.id;
+    control.block_next_history_read_until_cancelled();
+    let reads_before = control.history_reads_started();
+    let read_manager = manager.clone();
+    let read =
+        tokio::spawn(async move { read_manager.read_history_dump_chunk(dump_id, 0, 64).await });
+    timeout(Duration::from_secs(1), async {
+        while control.history_reads_started() == reads_before {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("history read should start");
+
+    timeout(Duration::from_secs(1), manager.end_history_dump(dump_id))
+        .await
+        .expect("history cleanup should not wait for the serial timeout")
+        .unwrap();
+    assert_eq!(read.await.unwrap(), Err(DeviceError::OperationCancelled));
+    assert_eq!(control.history_pause_depth(), 0);
+    assert!(!manager.display_pause_state().await.unwrap().paused);
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn history_lease_expiry_cancels_a_stalled_read_and_resumes_display() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let dump = manager.begin_history_dump().await.unwrap();
+    control.block_next_history_read_until_cancelled();
+    let reads_before = control.history_reads_started();
+    let read_manager = manager.clone();
+    let read =
+        tokio::spawn(async move { read_manager.read_history_dump_chunk(dump.id, 0, 64).await });
+    while control.history_reads_started() == reads_before {
+        tokio::task::yield_now().await;
+    }
+
+    tokio::time::advance(Duration::from_secs(10)).await;
+    assert_eq!(read.await.unwrap(), Err(DeviceError::OperationCancelled));
+    for _ in 0..10 {
+        tokio::task::yield_now().await;
+        if control.history_pause_depth() == 0 {
+            break;
+        }
+    }
+    assert_eq!(control.history_pause_depth(), 0);
+    assert!(!manager.display_pause_state().await.unwrap().paused);
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
 async fn debug_display_pause_is_bounded_and_does_not_break_history_ownership() {
     let (backend, control) = MockBackend::new();
     let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
@@ -965,6 +1047,413 @@ async fn failed_connections_are_backed_off_before_retrying() {
     })
     .await;
     assert_eq!(control.connection_attempts(), 2);
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn theme_assets_are_exact_and_share_existing_display_pause_ownership() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let info = manager.read_device_info().await.unwrap();
+    assert!(info.capabilities.iter().any(|value| value == "config-v3"));
+    assert!(!info.capabilities.iter().any(|value| value == "config-v2"));
+    let slot = ThemeAssetSlot::BackgroundOrange;
+    let original = manager.read_theme_asset(slot).await.unwrap();
+    assert_eq!(original.len(), slot.byte_len());
+    assert_eq!(original, control.theme_asset(slot).unwrap());
+    assert_eq!(control.history_pause_depth(), 0);
+
+    manager.pause_display(30_000).await.unwrap();
+    let while_debug_paused = manager
+        .read_theme_asset(ThemeAssetSlot::FanDark1)
+        .await
+        .unwrap();
+    assert_eq!(
+        while_debug_paused.len(),
+        ThemeAssetSlot::FanDark1.byte_len()
+    );
+    assert_eq!(control.history_pause_depth(), 1);
+    manager.resume_display().await.unwrap();
+    assert_eq!(control.history_pause_depth(), 0);
+
+    let dump = manager.begin_history_dump().await.unwrap();
+    assert!(matches!(
+        manager.read_theme_asset(slot).await,
+        Err(DeviceError::Busy(message)) if message.contains("history dump")
+    ));
+    assert!(matches!(
+        manager.write_theme_asset(slot, original).await,
+        Err(DeviceError::Busy(message)) if message.contains("history dump")
+    ));
+    assert_eq!(control.theme_mutations(), 0);
+    manager.end_history_dump(dump.id).await.unwrap();
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn legacy_configuration_versions_do_not_advertise_or_accept_theme_assets() {
+    let (backend, control) = MockBackend::new();
+    let mut legacy = DeviceConfiguration::mock();
+    legacy.raw_version = 1;
+    control.set_saved_configuration(legacy);
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let info = manager.read_device_info().await.unwrap();
+    assert_eq!(info.config_version, 1);
+    assert!(info.capabilities.iter().any(|value| value == "config-v2"));
+    assert!(!info.capabilities.iter().any(|value| value == "config-v1"));
+    assert!(
+        !info
+            .capabilities
+            .iter()
+            .any(|value| value.starts_with("theme-assets-"))
+    );
+    let slot = ThemeAssetSlot::FanDark1;
+    assert!(matches!(
+        manager.read_theme_asset(slot).await,
+        Err(DeviceError::Unsupported(_))
+    ));
+    assert!(matches!(
+        manager
+            .write_theme_asset(slot, vec![0; slot.byte_len()])
+            .await,
+        Err(DeviceError::Unsupported(_))
+    ));
+    assert_eq!(control.theme_mutations(), 0);
+    assert_eq!(control.history_pause_depth(), 0);
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn theme_writes_validate_size_and_preserve_known_failures() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let slot = ThemeAssetSlot::FanBlackWhite1;
+    let original = manager.read_theme_asset(slot).await.unwrap();
+    assert!(matches!(
+        manager
+            .write_theme_asset(slot, vec![0; slot.byte_len() - 1])
+            .await,
+        Err(DeviceError::InvalidArgument(_))
+    ));
+    assert_eq!(control.theme_mutations(), 0);
+
+    control.fail_next_theme_write(MockThemeWriteFailure::BeforeMutation);
+    assert!(matches!(
+        manager
+            .write_theme_asset(slot, vec![7; slot.byte_len()])
+            .await,
+        Err(DeviceError::Transport(_))
+    ));
+    assert_eq!(control.theme_mutations(), 0);
+    assert_eq!(control.theme_asset(slot).unwrap(), original);
+
+    control.fail_next_theme_write(MockThemeWriteFailure::FailedAndRolledBack);
+    assert!(matches!(
+        manager
+            .write_theme_asset(slot, vec![8; slot.byte_len()])
+            .await,
+        Err(DeviceError::FailedAndRolledBack(_))
+    ));
+    assert_eq!(control.theme_mutations(), 1);
+    assert_eq!(control.theme_asset(slot).unwrap(), original);
+    assert!(matches!(
+        manager.state().connection,
+        ConnectionState::Ready { .. }
+    ));
+    assert_eq!(control.history_pause_depth(), 0);
+
+    control.fail_next_theme_write(MockThemeWriteFailure::RollbackFailed);
+    assert!(matches!(
+        manager
+            .write_theme_asset(slot, vec![6; slot.byte_len()])
+            .await,
+        Err(DeviceError::RollbackFailed { .. })
+    ));
+    assert_eq!(control.theme_mutations(), 2);
+    assert_eq!(control.theme_asset(slot).unwrap(), vec![0; slot.byte_len()]);
+
+    let replacement = vec![9; slot.byte_len()];
+    manager
+        .write_theme_asset(slot, replacement.clone())
+        .await
+        .unwrap();
+    assert_eq!(manager.read_theme_asset(slot).await.unwrap(), replacement);
+    assert_eq!(control.theme_mutations(), 3);
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn disconnect_before_theme_mutation_is_not_reported_as_unknown() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    control.fail_next_theme_write(MockThemeWriteFailure::DisconnectBeforeMutation);
+    let slot = ThemeAssetSlot::FanOrange2;
+    assert_eq!(
+        manager
+            .write_theme_asset(slot, vec![3; slot.byte_len()])
+            .await,
+        Err(DeviceError::ConnectionLost)
+    );
+    assert_eq!(control.theme_mutations(), 0);
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Absent { .. })
+    })
+    .await;
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn display_resume_disconnect_does_not_hide_a_verified_theme_outcome() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let slot = ThemeAssetSlot::FanDark2;
+    let replacement = vec![0x44; slot.byte_len()];
+    control.fail_next_display_resume(MockDisplayResumeFailure::Disconnect);
+    assert_eq!(
+        manager.write_theme_asset(slot, replacement.clone()).await,
+        Ok(())
+    );
+    assert_eq!(control.theme_asset(slot).unwrap(), replacement);
+    assert_eq!(control.theme_mutations(), 1);
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Absent { .. })
+    })
+    .await;
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn display_resume_disconnect_does_not_hide_verified_theme_rollback() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let slot = ThemeAssetSlot::FanBlackWhite2;
+    let original = control.theme_asset(slot).unwrap();
+    control.fail_next_theme_write(MockThemeWriteFailure::FailedAndRolledBack);
+    control.fail_next_display_resume(MockDisplayResumeFailure::Disconnect);
+    assert!(matches!(
+        manager
+            .write_theme_asset(slot, vec![0x55; slot.byte_len()])
+            .await,
+        Err(DeviceError::FailedAndRolledBack(_))
+    ));
+    assert_eq!(control.theme_asset(slot).unwrap(), original);
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Absent { .. })
+    })
+    .await;
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn transient_display_resume_failure_preserves_outcome_and_pause_tracking() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let slot = ThemeAssetSlot::FanOrange1;
+    let replacement = vec![0x66; slot.byte_len()];
+    control.fail_next_display_resume(MockDisplayResumeFailure::Transport);
+    assert_eq!(
+        manager.write_theme_asset(slot, replacement.clone()).await,
+        Ok(())
+    );
+    assert_eq!(control.theme_asset(slot).unwrap(), replacement);
+    assert_eq!(control.history_pause_depth(), 1);
+    assert!(manager.display_pause_state().await.unwrap().paused);
+    assert!(matches!(
+        manager.state().connection,
+        ConnectionState::Ready { .. }
+    ));
+
+    // Cleanup retries autonomously; it must not require another client command
+    // or repeat the flash mutation.
+    tokio::time::advance(Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+    assert_eq!(control.history_pause_depth(), 0);
+    assert!(!manager.display_pause_state().await.unwrap().paused);
+    assert_eq!(control.theme_mutations(), 1);
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn display_resume_retry_defers_to_new_pause_ownership_without_spinning() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let slot = ThemeAssetSlot::FanOrange2;
+    control.fail_next_display_resume(MockDisplayResumeFailure::Transport);
+    manager
+        .write_theme_asset(slot, vec![0x77; slot.byte_len()])
+        .await
+        .unwrap();
+    manager.pause_display(2_000).await.unwrap();
+    let sequence_before_retry = manager.state().sequence;
+
+    tokio::time::advance(Duration::from_secs(1)).await;
+    for _ in 0..10 {
+        tokio::task::yield_now().await;
+    }
+    assert!(manager.display_pause_state().await.unwrap().paused);
+    assert_eq!(manager.state().sequence, sequence_before_retry);
+
+    tokio::time::advance(Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+    assert_eq!(control.history_pause_depth(), 0);
+    assert!(!manager.display_pause_state().await.unwrap().paused);
+    assert_eq!(control.theme_mutations(), 1);
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn display_resume_disconnect_does_not_discard_completed_theme_read() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    let slot = ThemeAssetSlot::FanBlackWhite1;
+    let expected = control.theme_asset(slot).unwrap();
+    control.fail_next_display_resume(MockDisplayResumeFailure::Disconnect);
+    assert_eq!(manager.read_theme_asset(slot).await, Ok(expected));
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Absent { .. })
+    })
+    .await;
+
+    manager.observe(HostEvent::Shutdown).await.unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn disconnect_during_theme_write_reports_unknown_outcome() {
+    let (backend, control) = MockBackend::new();
+    let (manager, task) = spawn_manager(backend, Duration::from_secs(60));
+    let mut state_rx = manager.subscribe_state();
+    manager
+        .observe(HostEvent::Candidates(vec!["/dev/ttyACM0".into()]))
+        .await
+        .unwrap();
+    wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Ready { .. })
+    })
+    .await;
+
+    control.fail_next_theme_write(MockThemeWriteFailure::Disconnect);
+    let slot = ThemeAssetSlot::FanOrange1;
+    assert_eq!(
+        manager
+            .write_theme_asset(slot, vec![3; slot.byte_len()])
+            .await,
+        Err(DeviceError::OperationOutcomeUnknown)
+    );
+    let state = wait_for_state(&mut state_rx, |state| {
+        matches!(state, ConnectionState::Absent { .. })
+    })
+    .await;
+    assert!(state.telemetry.unwrap().stale);
+    assert!(!control.is_connected());
 
     manager.observe(HostEvent::Shutdown).await.unwrap();
     task.await.unwrap();
