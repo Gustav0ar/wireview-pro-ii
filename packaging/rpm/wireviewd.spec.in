@@ -35,9 +35,11 @@ fi
 if test -d /run/systemd/system; then
     systemctl daemon-reload || :
     systemctl preset wireviewd.socket >/dev/null 2>&1 || :
-    systemctl start wireviewd.socket || :
-    systemctl try-restart wireviewd.service >/dev/null 2>&1 || :
+    systemctl stop wireviewd.service >/dev/null 2>&1 || :
+    systemctl restart wireviewd.socket || :
 fi
+printf '%s\n' \
+    'Add client users to wireview-client, then log in again: usermod --append --groups wireview-client USER'
 
 %preun
 if test "$1" -eq 0 && test -d /run/systemd/system; then

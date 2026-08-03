@@ -147,7 +147,7 @@ jobs:
           sudo systemctl daemon-reload
           sudo systemctl enable --now wireviewd.socket
           sudo systemctl restart wireviewd.service
-          wireview status | grep -Fq 'api=1'
+          sudo -u "$(id -un)" -g wireview-client wireview status | grep -Fq 'api=2'
           sudo apt-get install --yes ./dist/*.deb
           cli_version="$(wireview version)"
           daemon_version="$(wireviewd --version)"
@@ -157,13 +157,13 @@ jobs:
           sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/deb.build-id
           test -s dist/deb.build-id
           test -f /usr/lib/systemd/system/wireviewd.socket
-          wireview status | grep -Fq 'api=1'
+          sudo -u "$(id -un)" -g wireview-client wireview status | grep -Fq 'api=2'
           sudo systemctl stop wireviewd.service
           test "$(systemctl is-active wireviewd.socket)" = active
-          wireview status | grep -Fq 'api=1'
+          sudo -u "$(id -un)" -g wireview-client wireview status | grep -Fq 'api=2'
           test "$(systemctl is-active wireviewd.service)" = active
           sudo systemctl restart wireviewd.service
-          wireview status | grep -Fq 'api=1'
+          sudo -u "$(id -un)" -g wireview-client wireview status | grep -Fq 'api=2'
           sudo apt-get remove --yes wireviewd
           test ! -e /usr/bin/wireview
           sudo rm -f /etc/systemd/system/wireviewd.service.d/ci.conf

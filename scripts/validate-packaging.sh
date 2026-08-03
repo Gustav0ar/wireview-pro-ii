@@ -64,6 +64,16 @@ systemd-sysusers --dry-run --root="${stage_dir}" \
 systemd-analyze verify --root="${stage_dir}" \
   /usr/lib/systemd/system/wireviewd.service \
   /usr/lib/systemd/system/wireviewd.socket
+grep -Fqx 'g wireview-client - -' \
+  "${stage_dir}/usr/lib/sysusers.d/wireview.conf"
+grep -Fqx 'SocketMode=0660' \
+  "${stage_dir}/usr/lib/systemd/system/wireviewd.socket"
+grep -Fqx 'SocketGroup=wireview-client' \
+  "${stage_dir}/usr/lib/systemd/system/wireviewd.socket"
+for limit in 'LimitNOFILE=128' 'MemoryHigh=96M' 'MemoryMax=128M' 'TasksMax=32'; do
+  grep -Fqx "${limit}" \
+    "${stage_dir}/usr/lib/systemd/system/wireviewd.service"
+done
 
 test "$(stat -c '%a' "${stage_dir}/usr/bin/wireviewd")" = "755"
 test "$(stat -c '%a' "${stage_dir}/usr/bin/wireview")" = "755"

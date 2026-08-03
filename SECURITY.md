@@ -8,10 +8,16 @@ The supported branch is the latest tagged release. Security fixes may restrict
 device functionality when protocol safety or authorization is uncertain.
 
 `wireviewd` runs as a dedicated unprivileged user. All Varlink operations,
-including configuration changes, are available to local users through its Unix
-socket. The `wireview` system group grants only the daemon access to the USB
-device; clients never open the device directly. This means every local process
-that can connect to the socket is trusted to use the normal device API.
+including configuration changes, are available to members of the
+`wireview-client` group through its Unix socket. The `wireview` system group
+grants only the daemon access to the USB device; clients never open the device
+directly. This means every local process running with `wireview-client` group
+membership is trusted to use the normal device API. Add an authorized user,
+then log out and back in, with:
+
+```bash
+sudo usermod --append --groups wireview-client "$USER"
+```
 
 Configuration validation, stale-revision checks, readback verification, and
 rollback are enforced by the daemon rather than only by the CLI. Operations
