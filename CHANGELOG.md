@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented here.
 
+## 1.1.0 - 2026-08-03
+
+- Align parsed history validity and power-on boundary handling with Windows
+  software 1.0.7.
+- Retry only transient SPI page-read timeouts while preserving exact-read
+  semantics.
+- Add exact backup and guarded, sector-preserving, verified replacement for the
+  eight fixed V3 RGB565 theme slots.
+- Bump the Varlink contract to API 2.
+- Retry display-resume cleanup automatically after transient transport errors.
+- Make history cancellation interrupt stalled read-only SPI operations.
+- Restrict API access to the dedicated `wireview-client` group and bound daemon
+  memory, tasks, and file descriptors.
+
 ## 1.0.0 - 2026-07-29
 
 - Initial Linux daemon and CLI.
