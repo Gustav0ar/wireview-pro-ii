@@ -138,6 +138,7 @@ jobs:
             WIREVIEW_PACKAGE_VERSION=0.999.0 \
             bash scripts/build-packages.sh deb
           sudo apt-get install --yes ./target/previous-package/*.deb
+          sudo usermod --append --groups wireview-client "$(id -un)"
           sudo install -d /etc/systemd/system/wireviewd.service.d
           printf '%s\n' \
             '[Service]' \
