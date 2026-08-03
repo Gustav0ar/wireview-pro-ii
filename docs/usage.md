@@ -4,6 +4,20 @@ The `wireview` CLI talks to `wireviewd`; it never opens the USB device
 directly. Run `wireview --help` or `wireview COMMAND --help` for the installed
 command reference.
 
+Before using the CLI for the first time, enable the packaged socket and add
+your user to the authorized client group:
+
+```bash
+sudo systemctl enable --now wireviewd.socket
+sudo usermod --append --groups wireview-client "$USER"
+```
+
+Log out and back in after running `usermod` so the new group membership takes
+effect. Do not add client users to `wireview`; that group is reserved for the
+daemon's direct USB access. The current package creates `wireview-client`. If
+the group does not exist, install or upgrade the package before running
+`usermod`.
+
 ## Everyday commands
 
 ```bash
@@ -43,6 +57,39 @@ after success. Ctrl+C and SIGTERM close the daemon-side dump session and resume
 display updates. If a client disappears without cleanup, a 10-second daemon
 lease performs it. The recorded timestamps are a wrapping device millisecond
 counter, not calendar dates.
+
+Parsed exports include only valid measurement records. A measurement must have
+a known cable capability and a six-pin voltage-byte sum strictly between 60
+and 900. Power-on records establish that the log has started but are not
+reported as sensor samples. Exact raw export preserves every byte for forensic
+or alternative decoding.
+
+## Theme asset backup and replacement
+
+Theme assets are exact device-format RGB565 bytes, not PNG or JPEG files. Read
+an asset before changing it and keep that backup:
+
+```bash
+wireview theme read background-dark --output background-dark.rgb565
+wireview theme read fan-dark-1 --output fan-dark-1.rgb565
+wireview theme write fan-dark-1 replacement.rgb565 --yes
+```
+
+The fixed slots are `background-orange`, `background-dark`, `fan-orange-1`,
+`fan-orange-2`, `fan-dark-1`, `fan-dark-2`, `fan-black-white-1`, and
+`fan-black-white-2`. Background files are exactly 108800 bytes (320×170×2);
+fan-frame files are exactly 10658 bytes (73×73×2).
+
+Writes require `--yes`. The CLI checks the file type and exact size before
+connecting. The daemon preserves the complete affected flash sectors, changes
+only the selected slot, reads the result back, and reports its SHA-256 digest.
+If verification fails while the device remains connected, it restores and
+verifies the original sectors. A disconnect before the first erase reports a
+normal connection loss; a disconnect after mutation starts reports an unknown
+outcome and is never retried automatically. Display-resume cleanup is tracked
+separately and cannot change a verified commit or rollback result. Theme access is available only on
+configuration V3 devices (raw version 2); no arbitrary flash address is
+accepted by the CLI or API.
 
 ## Screens, faults, and debug commands
 

@@ -95,3 +95,8 @@ Configuration mutation requires the explicit
 `WIREVIEW_HIL_CONFIG_MUTATION=1` opt-in. Persistent store and factory reset are
 tested by the mock integration suite and are not part of the ordinary hardware
 smoke test.
+
+`WIREVIEW_HIL_THEME_MUTATION=1` plus an explicit named
+`WIREVIEW_HIL_THEME_SLOT` performs an attended read/write/read comparison using
+the exact existing bytes. It intentionally remains opt-in because it erases
+and rewrites flash. Firmware update is not part of this gate.

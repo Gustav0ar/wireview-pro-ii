@@ -16,6 +16,8 @@ Grizzly.
 
 - Human-readable and JSON live telemetry, including an in-place watch mode
 - Table, CSV, JSON, and exact-raw device-history export
+- Exact RGB565 backup and guarded, verified replacement of eight named theme
+  asset slots
 - Complete validated configuration read, temporary apply, permanent store,
   reload, and factory reset
 - Individual configuration get/set commands
@@ -30,25 +32,32 @@ Install the package for your distribution:
 
 ```bash
 # Debian or Ubuntu
-sudo apt install ./wireviewd_1.0.0-1_amd64.deb
+sudo apt install ./wireviewd_1.1.0-1_amd64.deb
 
 # Fedora
-sudo dnf install ./wireviewd-1.0.0-1*.x86_64.rpm
+sudo dnf install ./wireviewd-1.1.0-1*.x86_64.rpm
 
 # Arch Linux
-sudo pacman -U ./wireviewd-1.0.0-1-x86_64.pkg.tar.zst
+sudo pacman -U ./wireviewd-1.1.0-1-x86_64.pkg.tar.zst
 ```
 
 Enable socket activation:
 
 ```bash
 sudo systemctl enable --now wireviewd.socket
+sudo usermod --append --groups wireview-client "$USER"
 ```
+
+Log out and back in after joining `wireview-client`. Membership authorizes CLI
+access, including validated device writes, without granting direct USB access.
+The current package creates `wireview-client` during installation. If
+`usermod` reports that the group does not exist, install or upgrade the package
+before running it; an older or manually staged installation is still active.
 
 Every package installs `/usr/bin/wireview`, `/usr/bin/wireviewd`, a
 `wireview(1)` manual page, shell completions, the Varlink IDL, and service
-files. All local users may use the CLI; no `wireview` group membership is
-required.
+files. Members of `wireview-client` may use the CLI; the separate `wireview`
+group is reserved for the daemon's direct USB access.
 
 ## Quick start
 
@@ -58,6 +67,8 @@ wireview info
 wireview telemetry
 wireview telemetry --watch
 wireview history --format csv --output history.csv
+wireview theme read fan-dark-1 --output fan-dark-1.raw
+wireview theme write fan-dark-1 fan-dark-1.raw --yes
 wireview faults
 wireview config show
 wireview config get fan.mode

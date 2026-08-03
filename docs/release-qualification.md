@@ -6,6 +6,13 @@ operator-attended hardware gate, not a CI replacement.
 ## Preconditions
 
 - Install the candidate package and start `wireviewd.socket`.
+- Add the operator to `wireview-client`, then log out and back in:
+
+  ```bash
+  sudo usermod --append --groups wireview-client "$USER"
+  ```
+
+- Run the checklist as that operator.
 - Confirm the device is behaving normally and its desired configuration is
   stored.
 - Close any other application or VM currently holding the USB device.
@@ -53,6 +60,27 @@ WIREVIEW_RELEASE_CONFIG=1 \
 bash scripts/qualify-release.sh
 ```
 
+An explicitly attended theme flash transaction can be exercised separately
+with the lower-level hardware smoke test. It reads `fan-dark-1`, writes those
+exact same bytes through the erase/rewrite path, reads them back, and requires
+an exact comparison:
+
+```bash
+WIREVIEW_HIL=1 \
+WIREVIEW_HIL_THEME_MUTATION=1 \
+WIREVIEW_HIL_THEME_SLOT=fan-dark-1 \
+bash scripts/smoke-hardware.sh
+```
+
+This gate is off by default and requires an explicit named slot because it
+mutates SPI flash even though the payload is unchanged. On failure it retains
+the backup, hashes, daemon log, and readback evidence and prints a manual
+recovery command. Inspect device behavior before attempting recovery. It does
+not exercise firmware update or arbitrary flash access.
+
+The runner validates the slot name before starting the daemon and enables
+recovery guidance only after the backup and its digest have been created.
+
 Systemd restart and socket activation:
 
 ```bash
@@ -97,6 +125,7 @@ Before publishing, confirm:
 - final telemetry is fresh, display updates are active, and device behavior is
   normal;
 - final configuration settings match the captured baseline;
+- when the optional theme gate ran, exact theme readback matched its baseline;
 - the journal contains no unexplained warnings or errors.
 
 Calibration NVM and firmware/DFU operations are outside this checklist. They
