@@ -12,6 +12,8 @@ socket_path="${artifact_dir}/wireview.varlink"
 daemon_pid=""
 monitor_pid=""
 configuration_changed=0
+preserve_artifacts=0
+theme_slot="${WIREVIEW_HIL_THEME_SLOT:-}"
 
 cleanup() {
   if [[ -n "${daemon_pid}" && "${configuration_changed}" -eq 1 ]]; then
@@ -28,9 +30,29 @@ cleanup() {
     kill -INT "${daemon_pid}" 2>/dev/null || true
     wait "${daemon_pid}" 2>/dev/null || true
   fi
-  rm -rf -- "${artifact_dir}"
+  if [[ "${preserve_artifacts}" -eq 1 ]]; then
+    echo "Theme qualification evidence retained at ${artifact_dir}" >&2
+    echo "Inspect the device before any recovery attempt. Backup: ${artifact_dir}/theme-original.rgb565" >&2
+    echo "Manual recovery, when safe: wireview theme write ${theme_slot} ${artifact_dir}/theme-original.rgb565 --yes" >&2
+  else
+    rm -rf -- "${artifact_dir}"
+  fi
 }
 trap cleanup EXIT
+
+if [[ "${WIREVIEW_HIL_THEME_MUTATION:-}" == "1" && -z "${theme_slot}" ]]; then
+  echo "Set WIREVIEW_HIL_THEME_SLOT to an explicit named slot." >&2
+  exit 2
+fi
+if [[ "${WIREVIEW_HIL_THEME_MUTATION:-}" == "1" ]]; then
+  case "${theme_slot}" in
+    background-orange|background-dark|fan-orange-1|fan-orange-2|fan-dark-1|fan-dark-2|fan-black-white-1|fan-black-white-2) ;;
+    *)
+      echo "WIREVIEW_HIL_THEME_SLOT is not a recognized theme slot: ${theme_slot}" >&2
+      exit 2
+      ;;
+  esac
+fi
 
 cd "${project_dir}"
 if [[ "${WIREVIEW_SKIP_BUILD:-}" != "1" ]]; then
@@ -67,6 +89,27 @@ fi
   >"${artifact_dir}/telemetry.out"
 ./target/debug/wireview --socket "${socket_path}" config show --json \
   >"${artifact_dir}/configuration-original.json"
+if [[ "${WIREVIEW_HIL_THEME_MUTATION:-}" == "1" ]]; then
+  ./target/debug/wireview --socket "${socket_path}" theme read "${theme_slot}" \
+    --output "${artifact_dir}/theme-original.rgb565" \
+    >"${artifact_dir}/theme-read.out"
+  sha256sum "${artifact_dir}/theme-original.rgb565" \
+    >"${artifact_dir}/theme-original.sha256"
+  preserve_artifacts=1
+  ./target/debug/wireview --socket "${socket_path}" theme write "${theme_slot}" \
+    "${artifact_dir}/theme-original.rgb565" --yes \
+    >"${artifact_dir}/theme-write.out"
+  ./target/debug/wireview --socket "${socket_path}" theme read "${theme_slot}" \
+    --output "${artifact_dir}/theme-readback.rgb565" \
+    >"${artifact_dir}/theme-readback.out"
+  sha256sum "${artifact_dir}/theme-readback.rgb565" \
+    >"${artifact_dir}/theme-readback.sha256"
+  cmp "${artifact_dir}/theme-original.rgb565" \
+    "${artifact_dir}/theme-readback.rgb565"
+  test "$(cut -d ' ' -f 1 "${artifact_dir}/theme-original.sha256")" = \
+    "$(cut -d ' ' -f 1 "${artifact_dir}/theme-readback.sha256")"
+  preserve_artifacts=0
+fi
 if [[ "${WIREVIEW_HIL_CONFIG_MUTATION:-}" == "1" ]]; then
   jq '
     .settings.backlight_percent = (

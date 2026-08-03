@@ -6,7 +6,22 @@ Packages install both the daemon and CLI. Enable socket activation once:
 
 ```bash
 sudo systemctl enable --now wireviewd.socket
+sudo usermod --append --groups wireview-client "$USER"
 systemctl status wireviewd.socket
+```
+
+Log out and back in once after joining the client group.
+
+The package creates `wireview-client` through
+`/usr/lib/sysusers.d/wireview.conf`. If `usermod` reports that the group does
+not exist, the installed package or manually staged files predate the client
+group. Install or upgrade the current package first. For a deliberate source
+installation that has already staged the current files under `/usr`, create
+the declared identities before adding users:
+
+```bash
+sudo systemd-sysusers /usr/lib/sysusers.d/wireview.conf
+sudo usermod --append --groups wireview-client "$USER"
 ```
 
 The socket starts `wireviewd.service` on the first CLI request. Useful checks:
@@ -17,9 +32,11 @@ systemctl status wireviewd.service wireviewd.socket
 journalctl -u wireviewd.service
 ```
 
-All local users may connect to the Varlink socket. Only the dedicated daemon
-account opens the USB serial device. There is no client group-membership or
-polkit requirement, so any local process can invoke validated device writes.
+Members of `wireview-client` may connect to the Varlink socket and invoke
+validated device writes. Only the dedicated daemon account belongs to the
+separate `wireview` group that opens the USB serial device. The service also
+bounds memory, tasks, and file descriptors so malformed local traffic cannot
+consume unbounded host resources.
 
 ## USB removal and VM passthrough
 
@@ -76,5 +93,5 @@ sudo dnf remove wireviewd
 sudo pacman -R wireviewd
 ```
 
-Removal leaves the package-owned system user and group in place so their
+Removal leaves the package-owned system user and groups in place so their
 numeric identities are not accidentally reused.

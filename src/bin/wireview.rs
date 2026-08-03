@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use wireviewd::build_info::{API_CAPABILITIES, API_VERSION, BUILD_ID, VERSION};
 use wireviewd::config::{DeviceSettings, FaultKind};
 use wireviewd::history::{FLASH_LENGTH, HistoryEntry, visit_history};
+use wireviewd::theme::{ThemeAssetSlot, sha256_hex};
 use wireviewd::varlink::{
     ConfigurationDto, ConfigurationItemDto, DEFAULT_SOCKET_PATH, DeviceInfoDto, StatusDto,
     TelemetryDto, WireViewError, WireViewProxy,
@@ -192,6 +193,11 @@ enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    /// Back up or replace fixed device display bitmap slots.
+    Theme {
+        #[command(subcommand)]
+        command: ThemeCommand,
+    },
     /// Show available screen modes or select one.
     #[command(after_help = SCREEN_HELP)]
     Screen {
@@ -309,6 +315,33 @@ enum ConfigCommand {
     /// Permanently replace stored configuration with firmware defaults.
     Reset {
         /// Confirm resetting all device configuration.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ThemeCommand {
+    /// Read exact device-format RGB565 bytes from a named slot.
+    Read {
+        /// Fixed theme asset slot.
+        ///
+        /// Available slots: background-orange, background-dark, fan-orange-1,
+        /// fan-orange-2, fan-dark-1, fan-dark-2, fan-black-white-1, and
+        /// fan-black-white-2.
+        slot: ThemeAssetSlot,
+        /// Destination file for the exact RGB565 bytes.
+        #[arg(short, long, value_name = "PATH", required = true)]
+        output: PathBuf,
+    },
+    /// Replace one named slot from an exact-size RGB565 file.
+    Write {
+        /// Fixed theme asset slot. See `theme read --help` for the complete list.
+        slot: ThemeAssetSlot,
+        /// Exact device-format RGB565 input file.
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+        /// Confirm the flash erase/write transaction.
         #[arg(long)]
         yes: bool,
     },
@@ -526,6 +559,19 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             return Err(std::io::Error::other("clearing device faults requires --yes").into());
         }
+        Command::Theme {
+            command: ThemeCommand::Write { yes: false, .. },
+        } => {
+            return Err(std::io::Error::other("theme asset write requires --yes").into());
+        }
+        Command::Theme {
+            command:
+                ThemeCommand::Write {
+                    slot,
+                    file,
+                    yes: true,
+                },
+        } => validate_theme_asset_file(*slot, file)?,
         _ => {}
     }
 
@@ -826,6 +872,76 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 print_success("Reset configuration to firmware defaults.", json)?;
             }
         },
+        Command::Theme { command } => match command {
+            ThemeCommand::Read { slot, output } => {
+                let asset = connection
+                    .read_theme_asset(slot.name())
+                    .await?
+                    .map_err(boxed_api_error)?;
+                if asset.slot != slot.name()
+                    || usize::try_from(asset.byte_length).ok() != Some(slot.byte_len())
+                    || asset.data.len() != slot.byte_len()
+                    || asset.width != slot.width()
+                    || asset.height != slot.height()
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "daemon returned inconsistent theme asset metadata",
+                    )
+                    .into());
+                }
+                let digest = sha256_hex(&asset.data);
+                if asset.sha256 != digest {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "daemon returned a theme asset with an invalid SHA-256",
+                    )
+                    .into());
+                }
+                let mut destination = AtomicOutput::create(&output)?;
+                destination.writer().write_all(&asset.data)?;
+                destination.commit()?;
+                println!(
+                    "Read {slot}: {} bytes, SHA-256 {digest}, written to {}.",
+                    asset.data.len(),
+                    output.display()
+                );
+            }
+            ThemeCommand::Write { slot, file, yes } => {
+                debug_assert!(yes);
+                validate_theme_asset_file(slot, &file)?;
+                let data = fs::read(&file)?;
+                if data.len() != slot.byte_len() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "theme asset file changed while it was being read",
+                    )
+                    .into());
+                }
+                let digest = sha256_hex(&data);
+                let result = connection
+                    .write_theme_asset(
+                        slot.name(),
+                        u32::try_from(data.len()).expect("theme asset length fits u32"),
+                        &digest,
+                        data,
+                        true,
+                    )
+                    .await?
+                    .map_err(boxed_api_error)?;
+                if result.slot != slot.name()
+                    || usize::try_from(result.byte_length).ok() != Some(slot.byte_len())
+                    || result.sha256 != digest
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "daemon returned inconsistent theme write verification",
+                    )
+                    .into());
+                }
+                println!("Wrote and verified {slot}: SHA-256 {digest}.");
+            }
+        },
         Command::Screen {
             screen: Some(screen),
         } => {
@@ -927,6 +1043,26 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Command::Screen { screen: None } | Command::Version => unreachable!(),
+    }
+    Ok(())
+}
+
+fn validate_theme_asset_file(slot: ThemeAssetSlot, file: &Path) -> std::io::Result<()> {
+    let metadata = fs::metadata(file)?;
+    if !metadata.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "theme asset input must be a regular file",
+        ));
+    }
+    if usize::try_from(metadata.len()).ok() != Some(slot.byte_len()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "theme asset {slot} must be exactly {} bytes",
+                slot.byte_len()
+            ),
+        ));
     }
     Ok(())
 }
@@ -1901,7 +2037,7 @@ mod tests {
     }
 
     #[test]
-    fn daemon_api_version_one_is_required() {
+    fn daemon_api_version_two_is_required() {
         let status = |api_version| StatusDto {
             api_version,
             api_compatibility_id: wireviewd::varlink::api_compatibility_id().into(),
@@ -1925,25 +2061,25 @@ mod tests {
             display_pause_history_active: false,
             display_pause_remaining_ms: 0,
         };
-        let encoded = serde_json::to_value(status(1)).expect("status should serialize");
-        assert_eq!(encoded["api_version"], serde_json::json!(1));
+        let encoded = serde_json::to_value(status(2)).expect("status should serialize");
+        assert_eq!(encoded["api_version"], serde_json::json!(2));
         assert!(encoded["api_version"].is_number());
-        assert!(require_api_version(&status(1)).is_ok());
-        for version in [0, 2, u32::MAX] {
+        assert!(require_api_version(&status(2)).is_ok());
+        for version in [0, 1, u32::MAX] {
             let error = require_api_version(&status(version))
                 .unwrap_err()
                 .to_string();
             assert!(error.contains(&format!("API version {version}")));
-            assert!(error.contains("requires version 1"));
+            assert!(error.contains("requires version 2"));
         }
 
-        let mut incompatible = status(1);
+        let mut incompatible = status(2);
         incompatible.api_compatibility_id.clear();
         let error = require_api_version(&incompatible).unwrap_err().to_string();
         assert!(error.contains("Incompatible wireviewd API schema"));
         assert!(error.contains("not reported"));
 
-        let mut incomplete = status(1);
+        let mut incomplete = status(2);
         incomplete
             .api_capabilities
             .retain(|capability| capability != "history-dump");

@@ -6,7 +6,7 @@ pub const BUILD_ID: &str = match option_env!("WIREVIEW_BUILD_ID") {
     None => "development",
 };
 
-pub const API_VERSION: u32 = 1;
+pub const API_VERSION: u32 = 2;
 pub const API_CAPABILITIES: &[&str] = &[
     "configuration-items",
     "device-control",
@@ -15,4 +15,6 @@ pub const API_CAPABILITIES: &[&str] = &[
     "fault-registers",
     "history-dump",
     "telemetry",
+    "theme-assets-read",
+    "theme-assets-write",
 ];

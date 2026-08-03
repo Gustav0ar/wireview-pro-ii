@@ -19,12 +19,12 @@ client on those systems.
 
 ## Stability policy
 
-Package version 1.x exposes API version `1`. This field is the JSON integer
-`1`, never the strings `"1"` or `"v1"`.
+The current package exposes API version `2`. This field is the JSON integer
+`2`, never the strings `"2"` or `"v2"`.
 
-Within API 1, existing methods, fields, types, errors, and documented semantics
+Within API 2, existing methods, fields, types, errors, and documented semantics
 will not be removed, renamed, or incompatibly changed. New optional methods,
-types, fields, errors, or capabilities may be added while retaining API 1;
+types, fields, errors, or capabilities may be added while retaining API 2;
 independent clients should feature-detect them. Any incompatible contract or
 semantic change increments the integer to `2`, then `3`, and so on.
 
@@ -37,7 +37,7 @@ before every daemon-backed operation because the two binaries are shipped and
 upgraded together.
 
 Compatibility fingerprints use `wireview-API-DIGEST`, for example
-`wireview-1-711c3eafcc2df520`. The API component is the same plain decimal
+`wireview-2-0123456789abcdef`. The API component is the same plain decimal
 integer reported by `api_version`; it is not prefixed with `v`. The textual
 `org.varlink.service.GetInfo.version` value is the daemon package version and
 is separate from the WireView API integer.
@@ -62,6 +62,8 @@ is separate from the WireView API integer.
 | `ReadHistoryDumpChunk` | Reads one bounded chunk belonging to that dump/session |
 | `EndHistoryDump` | Resumes display updates and closes the dump lease |
 | `ReadHistoryChunk` | Development compatibility method; pauses/resumes around one chunk |
+| `ReadThemeAsset` | Reads one exact fixed RGB565 slot with geometry, length, and SHA-256 |
+| `WriteThemeAsset` | Guarded sector-preserving replacement with verified readback and SHA-256 |
 | `ClearFaults` | Selectively clears validated active/logged fault masks |
 | `GetPollInterval` / `SetPollInterval` | Reads or changes the runtime daemon poll interval (`100..=5000` ms) |
 | `PauseDisplay` / `ResumeDisplay` | Starts or ends a bounded debug display-pause lease without overriding a history-dump lease |
@@ -96,8 +98,20 @@ names; `none` or an empty value clears a list. Its result contains only the
 changed key and typed `value_json`, not the complete configuration.
 
 `StoreConfiguration`, persistent `SetConfigurationItem`,
-`ResetConfiguration`, `RebootDevice`, and `ClearFaults` require `confirm=true`
+`ResetConfiguration`, `RebootDevice`, `ClearFaults`, and `WriteThemeAsset`
+require `confirm=true`
 at the Varlink boundary. This is an intent check, not user authentication.
+
+Theme methods accept only one of the eight named slots; they never accept a
+flash address. `WriteThemeAsset` also requires the exact slot byte length, a
+matching lowercase SHA-256 digest, and exact byte data before any serial
+mutation. It preserves complete affected sectors and verifies full readback.
+Ordinary failures attempt verified rollback; connection loss returns
+`OperationOutcomeUnknown` only after mutation may have started. A disconnect
+during pause or sector backup returns an ordinary connection-loss error.
+Display-resume cleanup is reflected in daemon connection/pause state but does
+not replace a verified write or rollback result. Theme methods are supported
+only by configuration V3 (raw version 2).
 
 Display colors in `configuration_json` use either six hexadecimal `RRGGBB`
 characters or eight `AARRGGBB` characters. Six-digit colors are converted to
@@ -116,16 +130,25 @@ active history dump.
 
 ## Authorization
 
-The Unix socket accepts local connections for all methods. All local callers
-that can connect to the socket may invoke every exposed method, including
-configuration writes. The `wireview` CLI maps `--yes` to the daemon's explicit
-confirmation field for persistent store, configuration reset, fault clearing,
-and device reboot. The daemon remains the only process that opens the USB
-device. There is no `wireview` group membership requirement for clients and no
-polkit prompt.
+The Unix socket accepts connections from members of `wireview-client`. Members
+may invoke every exposed method, including configuration writes. The `wireview`
+CLI maps `--yes` to the daemon's explicit confirmation field for persistent
+store, configuration reset, fault clearing, device reboot, and theme
+replacement. The daemon remains the only process that opens the USB device;
+its separate `wireview` group is not granted to clients. There is no polkit
+prompt.
 
-The CLI exposes `ResetConfiguration` through both
-`wireview config reset --yes` and the recovery-oriented alias
+Add an interactive client user with:
+
+```bash
+sudo usermod --append --groups wireview-client "$USER"
+```
+
+Log out and back in before connecting so the new group membership takes
+effect.
+
+The CLI exposes `ResetConfiguration` through both `wireview config reset --yes`
+and the recovery-oriented alias
 `wireview debug factory-reset --yes`.
 
 ## Errors

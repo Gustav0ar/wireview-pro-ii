@@ -2,10 +2,14 @@
 
 post_install() {
   printf '%s\n' 'Enable the socket with: systemctl enable --now wireviewd.socket'
+  printf '%s\n' \
+    'Add client users to wireview-client, then log in again: usermod --append --groups wireview-client USER'
 }
 
 post_upgrade() {
-  systemctl try-restart wireviewd.service >/dev/null 2>&1 || true
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl stop wireviewd.service >/dev/null 2>&1 || true
+  systemctl try-restart wireviewd.socket >/dev/null 2>&1 || true
 }
 
 pre_remove() {

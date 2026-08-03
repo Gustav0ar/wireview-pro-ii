@@ -1,6 +1,6 @@
 # WireView Pro II serial protocol
 
-This document records the protocol subset implemented by `wireviewd` 1.0.0.
+This document records the protocol subset implemented by `wireviewd` 1.1.0.
 
 ## Transport
 
@@ -56,9 +56,9 @@ identity is always rejected.
 | Write configuration | `06` | Yes, complete validated configuration |
 | Read calibration | `07` | No |
 | Write calibration | `08` | No |
-| SPI write page | `09` | No |
-| SPI read page | `0A` | Yes, data-log region only |
-| SPI erase sector | `0B` | No |
+| SPI write page | `09` | Yes, internal typed theme transaction only |
+| SPI read page | `0A` | Yes, bounded history and typed theme slots |
+| SPI erase sector | `0B` | Yes, internal typed theme transaction only |
 | Screen change | `0C` | Yes |
 | Read build information | `0D` | Yes |
 | Clear faults | `0E` | Yes, validated masks |
@@ -67,8 +67,10 @@ identity is always rejected.
 | NVM operation | `F2` | Yes, configuration reload/store/reset only |
 | NOP | `FF` | No |
 
-Unsupported calibration, arbitrary write/erase, and bootloader commands are
-intentionally absent from the backend API.
+Unsupported calibration, arbitrary flash access, and bootloader commands are
+intentionally absent from the backend API. SPI write/erase cannot be addressed
+by a client; they are private implementation details of the eight fixed theme
+asset operations.
 
 Command `0D` returns the 68-byte, pack-4 `BuildStruct`: three vendor bytes,
 32 NUL-terminated ANSI bytes for product name, 32 for build information, and a
@@ -214,8 +216,12 @@ pack-1 layout and are 21 bytes:
 | 14 | 6 | per-pin currents | ÷10 A |
 | 20 | 1 | cable capability | same enum as live telemetry |
 
-Entry type 0 is a measurement and type 2 is a power-on marker. Types 1 and 3
-are skipped. The firmware pads entries that would cross a 256-byte page,
+Entry type 0 is a measurement and type 2 is a power-on marker. A measurement is
+published only when its cable-capability byte is 0 through 3 and the sum of its
+six raw voltage bytes is strictly greater than 60 and strictly less than 900.
+A power-on marker establishes that valid history has started, including for
+erased-entry termination, but its payload is never decoded as telemetry. Types
+1 and 3 are skipped. The firmware pads entries that would cross a 256-byte page,
 sectors are 4096 bytes, and 32 consecutive erased entries (`FF FF FF FF` in
 the data field) after the first valid record mark the logical end of history.
 
@@ -226,6 +232,43 @@ The CLI retains only the exact 8 MiB raw region. Table, CSV, and JSON exports
 visit decoded records one at a time rather than accumulating the expanded
 records. A named output is written to a same-directory temporary file, flushed,
 and atomically renamed only after successful completion.
+
+Each SPI page read permits three attempts. Only a two-second read timeout is
+retried, after a 10 ms delay and by resending the identical command. Short
+responses, transport errors, write/flush failures, and connection loss fail
+immediately. A multi-page read retries only the failed page and returns either
+all requested bytes or an error.
+
+## Theme bitmap slots
+
+Configuration V3 (raw version 2) uses eight fixed RGB565 bitmap slots:
+
+| Slot | Address | Bytes | Geometry |
+|---|---:|---:|---:|
+| `background-orange` | `0x00003000` | 108800 | 320×170 |
+| `background-dark` | `0x0001D900` | 108800 | 320×170 |
+| `fan-orange-1` | `0x00056374` | 10658 | 73×73 |
+| `fan-orange-2` | `0x0005B6BC` | 10658 | 73×73 |
+| `fan-dark-1` | `0x00058D18` | 10658 | 73×73 |
+| `fan-dark-2` | `0x0005E060` | 10658 | 73×73 |
+| `fan-black-white-1` | `0x00060A04` | 10658 | 73×73 |
+| `fan-black-white-2` | `0x000633A8` | 10658 | 73×73 |
+
+Reads use the exact-read policy above. A write first reads every affected
+4096-byte sector, patches only the selected byte range in memory, erases the
+whole sector range with `[0B, address LE32, length LE32]`, and rewrites each
+256-byte page with `[09, address LE32, length LE32]` followed by the payload.
+Erase and page-write commands each return one status byte; `01` is success.
+Mutation commands are never retried.
+
+The daemon reads the complete sector range back and requires an exact match.
+On an ordinary failure it restores and verifies the original sector snapshot.
+Connection loss during the backup read is known to precede mutation. Once the
+erase command may have started, connection loss stops the transaction and
+reports an unknown outcome because further writes would be unsafe. Display
+updates are paused for the transaction and resumed according to the daemon's
+independent pause ownership; resume cleanup cannot replace an already verified
+flash result.
 
 ## Screen subcommands
 

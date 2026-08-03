@@ -5,7 +5,8 @@ Documentation=file:///usr/share/doc/wireviewd/README.md
 [Socket]
 ListenStream=/run/wireviewd/io.github.Gustav0ar.WireView
 DirectoryMode=0755
-SocketMode=0666
+SocketMode=0660
+SocketGroup=wireview-client
 RemoveOnStop=yes
 Service=wireviewd.service
 

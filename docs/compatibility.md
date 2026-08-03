@@ -37,7 +37,10 @@ must not be inferred from codec tests or an earlier build.
 - Public build-string/device identity reads and validated selective fault clear
 - Parsed and exact-raw device history with one session-bound pause/resume lease
 - Streaming parsed-history export with atomic destination-file replacement
-- Generated API 1 interface/capability fingerprint, capability preflight, and
+- Strict 1.0.7 measurement validity gates and power-on boundary handling
+- Typed exact reads and guarded, verified sector-preserving writes for all
+  eight V3 RGB565 theme slots
+- Generated API 2 interface/capability fingerprint, capability preflight, and
   matching CLI/daemon build identity
 - Runtime daemon polling interval from 100 through 5000 ms
 - Verified physical-screen commands
@@ -52,7 +55,8 @@ must not be inferred from codec tests or an earlier build.
 The handshake determines capabilities for each host attachment. Version 1.0.0
 publishes `telemetry`, `history`, `screen`, `device-info`, `fault-clear`, and the
 detected `config-v1`, `config-v2`, or `config-v3` only after the greeting and
-device identity match.
+device identity match. Raw configuration version 2 additionally publishes
+`theme-assets-read` and `theme-assets-write`; older layouts do not.
 
 Calibration, arbitrary SPI writes/erase, and DFU are not advertised.
 Configuration reset is narrowly implemented through the recovered
@@ -77,10 +81,11 @@ mapping as the device's legacy layouts.
 | Screen selection | Implemented |
 | Screen pause/resume | Implemented as bounded debug leases and internal history ownership |
 | Raw log and parsed history | Implemented |
+| Fixed V3 RGB565 theme-slot backup and guarded replacement | Implemented; physical write qualification pending |
 | Raw and decoded fault state; selective `ClearFaults` | Implemented |
 | Calibration NVM actions | Gated: no safe backup/readback recovery evidence |
 | Enter bootloader / DFU update | Gated: firmware authenticity, range, identity continuity, and recovery evidence incomplete |
-| Raw calibration/SPI write/erase/device-data commands | Deliberately not exposed |
+| Raw calibration/SPI read/write/erase/device-data commands | Deliberately not exposed |
 
 The current daemon intentionally manages one active device. It rejects
 ambiguous matches rather than choosing one. Explicit multi-device selection is

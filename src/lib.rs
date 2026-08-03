@@ -8,8 +8,12 @@ pub mod domain;
 pub mod history;
 pub mod manager;
 pub mod protocol;
+pub mod theme;
 pub mod varlink;
 
-pub use backend::{DeviceBackend, MockBackend, MockControl, SerialBackend};
+pub use backend::{
+    DeviceBackend, MockBackend, MockControl, MockDisplayResumeFailure, MockThemeWriteFailure,
+    SerialBackend,
+};
 pub use domain::*;
 pub use manager::{HostEvent, ManagerHandle, spawn_manager};

@@ -257,8 +257,12 @@ pub enum DeviceError {
     NotConnected,
     #[error("device connection was lost")]
     ConnectionLost,
+    #[error("device connection was lost before mutation started")]
+    ConnectionLostBeforeMutation,
     #[error("operation outcome is unknown because the device disconnected")]
     OperationOutcomeUnknown,
+    #[error("operation was cancelled")]
+    OperationCancelled,
     #[error("more than one matching device is present")]
     AmbiguousDevice,
     #[error("unsupported device or firmware: {0}")]
@@ -271,9 +275,9 @@ pub enum DeviceError {
     ProtocolUnverified(String),
     #[error("transport error: {0}")]
     Transport(String),
-    #[error("configuration operation failed and the previous settings were restored: {0}")]
+    #[error("device mutation failed and the previous state was restored: {0}")]
     FailedAndRolledBack(String),
-    #[error("configuration operation failed ({operation}); rollback also failed ({rollback})")]
+    #[error("device mutation failed ({operation}); rollback also failed ({rollback})")]
     RollbackFailed { operation: String, rollback: String },
     #[error("configuration revision conflict: {0}")]
     RevisionConflict(String),

@@ -14,7 +14,7 @@ body:
     attributes:
       label: wireview version
       description: Paste the complete output of `wireview version`.
-      placeholder: wireview 1.0.0 (build source-...)
+      placeholder: wireview 1.1.0 (build source-...)
     validations:
       required: true
   - type: input
