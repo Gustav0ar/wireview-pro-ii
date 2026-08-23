@@ -80,12 +80,21 @@ strings.
 Fault clear is exactly five bytes:
 
 ```text
-0E ACTIVE_LO ACTIVE_HI LOGGED_LO LOGGED_HI
+0E ACTIVE_RETAIN_LO ACTIVE_RETAIN_HI LOGGED_RETAIN_LO LOGGED_RETAIN_HI
 ```
 
-Masks are little endian. Normal daemon calls permit only the six recovered
+Masks are little endian and identify bits the firmware must retain. The device
+ANDs each fault register with its supplied mask, so clearing active bit `0x20`
+while leaving logged faults unchanged sends `0E DF FF FF FF`. The daemon API
+instead accepts the more natural bits-to-clear masks and complements them only
+at this protocol boundary. Normal daemon calls permit only the six recovered
 fault bits (`0x003F`) and retain unknown bits in telemetry instead of silently
 discarding them.
+
+After clearing faults, the Windows 1.0.7 software sends screen command `0C EF`
+(`Same`). This makes the device leave its latched fault/exclamation screen and
+redraw the screen that was active before the fault. The daemon performs the
+same follow-up command before reading back telemetry.
 
 ## Device configuration
 

@@ -1379,7 +1379,9 @@ impl DeviceBackend for SerialBackend {
         logged_mask: u16,
     ) -> Result<(), DeviceError> {
         let command = clear_faults_command(active_mask, logged_mask);
-        self.send(&command).await
+        self.send(&command).await?;
+        self.send(&[UsbCommand::ScreenChange as u8, ScreenCommand::Same as u8])
+            .await
     }
 
     async fn pause_history_updates(&mut self) -> Result<(), DeviceError> {
@@ -1542,6 +1544,25 @@ mod tests {
         command.extend_from_slice(&address.to_le_bytes());
         command.extend_from_slice(&length.to_le_bytes());
         command
+    }
+
+    #[tokio::test]
+    async fn clearing_faults_restores_the_current_device_screen() {
+        let (serial, log) = FakeSerial::new([]);
+        let mut backend = SerialBackend {
+            port: Some(Box::new(serial)),
+            config_version: Some(2),
+        };
+
+        backend.clear_faults(0x0020, 0x0020).await.unwrap();
+
+        let log = log.lock().unwrap();
+        assert_eq!(log.clears, 2);
+        assert_eq!(log.flushes, 2);
+        assert_eq!(
+            log.writes,
+            vec![vec![0x0e, 0xdf, 0xff, 0xdf, 0xff], vec![0x0c, 0xef],]
+        );
     }
 
     #[tokio::test(start_paused = true)]

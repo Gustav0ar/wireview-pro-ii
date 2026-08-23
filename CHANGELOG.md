@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented here.
 
+## Unreleased
+
+- Fix selective fault clearing by converting daemon bits-to-clear masks into
+  the inverted retain masks required by the device firmware.
+- Restore the current device screen after fault clearing, matching the Windows
+  1.0.7 command sequence.
+
 ## 1.1.0 - 2026-08-03
 
 - Align parsed history validity and power-on boundary handling with Windows
