@@ -1,6 +1,6 @@
 [package]
 name = "wireviewd"
-version = "1.0.0"
+version = "1.0.2"
 edition = "2024"
 rust-version = "1.97.1"
 description = "Linux daemon and CLI for the Thermal Grizzly WireView Pro II"

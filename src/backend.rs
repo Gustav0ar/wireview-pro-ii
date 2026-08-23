@@ -783,7 +783,9 @@ impl DeviceBackend for SerialBackend {
         logged_mask: u16,
     ) -> Result<(), DeviceError> {
         let command = clear_faults_command(active_mask, logged_mask);
-        self.send(&command).await
+        self.send(&command).await?;
+        self.send(&[UsbCommand::ScreenChange as u8, ScreenCommand::Same as u8])
+            .await
     }
 
     async fn pause_history_updates(&mut self) -> Result<(), DeviceError> {

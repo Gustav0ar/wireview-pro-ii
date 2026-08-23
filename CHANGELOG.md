@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## 1.0.2 - 2026-08-23
+
+- Restore the current device screen after fault clearing, matching the Windows
+  1.0.7 command sequence.
+
+## 1.0.1 - 2026-08-23
+
+- Fix selective fault clearing by converting daemon bits-to-clear masks into
+  the inverted retain masks required by the device firmware.
+
 ## 1.0.0 - 2026-07-29
 
 - Initial Linux daemon and CLI.

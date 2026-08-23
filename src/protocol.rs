@@ -178,11 +178,13 @@ pub fn decode_faults(mask: u16) -> Vec<String> {
 }
 
 #[must_use]
-pub fn clear_faults_command(active_mask: u16, logged_mask: u16) -> [u8; 5] {
+pub fn clear_faults_command(active_clear_mask: u16, logged_clear_mask: u16) -> [u8; 5] {
     let mut command = [0_u8; 5];
     command[0] = UsbCommand::ClearFaults as u8;
-    command[1..3].copy_from_slice(&active_mask.to_le_bytes());
-    command[3..5].copy_from_slice(&logged_mask.to_le_bytes());
+    // Firmware ANDs each fault register with the supplied mask. The daemon API
+    // accepts bits selected for clearing, so invert them at the protocol edge.
+    command[1..3].copy_from_slice(&(!active_clear_mask).to_le_bytes());
+    command[3..5].copy_from_slice(&(!logged_clear_mask).to_le_bytes());
     command
 }
 
@@ -308,10 +310,18 @@ mod tests {
     }
 
     #[test]
-    fn clear_faults_frame_matches_protocol_layout() {
+    fn clear_faults_frame_inverts_selected_bits_into_firmware_retain_masks() {
         assert_eq!(
             clear_faults_command(0x1234, 0xabcd),
-            [0x0e, 0x34, 0x12, 0xcd, 0xab]
+            [0x0e, 0xcb, 0xed, 0x32, 0x54]
+        );
+        assert_eq!(
+            clear_faults_command(0x0020, 0),
+            [0x0e, 0xdf, 0xff, 0xff, 0xff]
+        );
+        assert_eq!(
+            clear_faults_command(0x0020, 0x0020),
+            [0x0e, 0xdf, 0xff, 0xdf, 0xff]
         );
     }
 }
