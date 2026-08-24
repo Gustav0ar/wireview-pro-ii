@@ -23,8 +23,8 @@ jobs:
           sudo apt-get install --yes libudev-dev
       - run: cargo install cargo-fuzz --version 0.13.2 --locked
       - name: Fuzz configuration parser
-        run: cargo fuzz run configuration -- -runs=20000 -max_len=4096
+        run: cargo +nightly-2026-07-30 fuzz run configuration -- -runs=20000 -max_len=4096
       - name: Fuzz history parser
-        run: cargo fuzz run history -- -runs=20000 -max_len=65536
+        run: cargo +nightly-2026-07-30 fuzz run history -- -runs=20000 -max_len=65536
       - name: Fuzz protocol parsers
-        run: cargo fuzz run protocol -- -runs=20000 -max_len=512
+        run: cargo +nightly-2026-07-30 fuzz run protocol -- -runs=20000 -max_len=512
