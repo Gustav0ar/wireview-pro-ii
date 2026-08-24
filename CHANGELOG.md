@@ -4,6 +4,8 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 1.1.1 - 2026-08-24
+
 - Fix selective fault clearing by converting daemon bits-to-clear masks into
   the inverted retain masks required by the device firmware.
 - Restore the current device screen after fault clearing, matching the Windows
