@@ -198,6 +198,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wireviewd-deb
+          if-no-files-found: error
           path: |
             dist/*.deb
             dist/*.spdx.json
@@ -254,6 +255,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wireviewd-rpm
+          if-no-files-found: error
           path: |
             dist/*.rpm
             dist/rpm.build-id
@@ -312,6 +314,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wireviewd-arch
+          if-no-files-found: error
           path: |
             dist/*.pkg.tar.zst
             dist/arch.build-id
@@ -333,14 +336,39 @@ jobs:
           pattern: wireviewd-*
           path: release
           merge-multiple: true
-      - name: Verify tag, version, and cross-package build identity
+      - name: Verify release package set and cross-package build identity
         env:
           EXPECTED_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
           RELEASE_TAG: ${{ needs.release-plan.outputs.tag }}
         run: |
+          set -euo pipefail
+          shopt -s nullglob
+
           version="${{ needs.release-plan.outputs.version }}"
           test "v${version}" = "${RELEASE_TAG}"
           test "${RELEASE_TAG}" = "${GITHUB_REF_NAME}"
+
+          deb_packages=(release/*.deb)
+          rpm_packages=(release/*.rpm)
+          arch_packages=(release/*.pkg.tar.zst)
+          sboms=(release/*.spdx.json)
+          test "${#deb_packages[@]}" -eq 1
+          test "${#rpm_packages[@]}" -eq 1
+          test "${#arch_packages[@]}" -eq 1
+          test "${#sboms[@]}" -eq 1
+          test "$(basename "${deb_packages[0]}")" = \
+            "wireviewd_${version}-1_amd64.deb"
+          test "$(basename "${arch_packages[0]}")" = \
+            "wireviewd-${version}-1-x86_64.pkg.tar.zst"
+          test "$(basename "${sboms[0]}")" = "wireviewd.spdx.json"
+          rpm_version="${version//./\\.}"
+          rpm_name="$(basename "${rpm_packages[0]}")"
+          if [[ ! "${rpm_name}" =~ \
+            ^wireviewd-${rpm_version}-1(\.[[:alnum:]_]+)?\.x86_64\.rpm$ ]]; then
+            echo "::error::Unexpected RPM package name: ${rpm_name}"
+            exit 1
+          fi
+
           test "$(find release -maxdepth 1 -name '*.build-id' -type f | wc -l)" -eq 3
           test "$(cat release/*.build-id | sort -u | wc -l)" -eq 1
           test "$(head -n 1 release/deb.build-id)" = "${EXPECTED_BUILD_ID}"
@@ -350,6 +378,7 @@ jobs:
           cd release
           sha256sum ./* > SHA256SUMS
           sha256sum --check SHA256SUMS
+          test "$(wc -l <SHA256SUMS)" -eq 4
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Sign checksum manifest
         run: >-
