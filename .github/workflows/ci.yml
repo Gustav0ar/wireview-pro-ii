@@ -24,6 +24,10 @@ jobs:
             jq \
             libfontconfig1-dev \
             libudev-dev \
+            libx11-xcb1 \
+            libxcursor1 \
+            libxi6 \
+            libxkbcommon-x11-0 \
             systemd \
             udev \
             xvfb
