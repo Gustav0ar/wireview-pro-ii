@@ -56,7 +56,7 @@ fi
 
 cd "${project_dir}"
 if [[ "${WIREVIEW_SKIP_BUILD:-}" != "1" ]]; then
-  cargo build --bins
+  cargo build --package wireviewd --bins --locked
 fi
 
 ./target/debug/wireviewd \

@@ -1,18 +1,26 @@
 Name:           wireviewd
 Version:        @VERSION@
 Release:        1%{?dist}
-Summary:        Linux daemon for the Thermal Grizzly WireView Pro II
+Summary:        Linux tools for the Thermal Grizzly WireView Pro II
 License:        MIT
 URL:            @PROJECT_URL@
 
 Requires:       systemd
 Requires:       systemd-udev
+Requires:       fontconfig
+Requires:       libX11
+Requires:       libX11-xcb
+Requires:       libXcursor
+Requires:       libXi
+Requires:       libxkbcommon
+Requires:       libxkbcommon-x11
+Requires:       libwayland-client
 
 %global debug_package %{nil}
 
 %description
-wireviewd provides telemetry, device configuration, and verified screen control for the
-Thermal Grizzly WireView Pro II through a Varlink API and command-line client.
+wireviewd provides a native desktop app, a command-line client, and a daemon for
+WireView Pro II telemetry, validated configuration, and verified device control.
 
 %prep
 
@@ -65,6 +73,7 @@ fi
 %doc /usr/share/doc/wireviewd/protocol.md
 %doc /usr/share/doc/wireviewd/compatibility.md
 %doc /usr/share/doc/wireviewd/usage.md
+%doc /usr/share/doc/wireviewd/desktop.md
 %doc /usr/share/doc/wireviewd/operations.md
 %doc /usr/share/doc/wireviewd/development.md
 %doc /usr/share/doc/wireviewd/varlink.md
@@ -75,11 +84,14 @@ fi
 /usr/share/fish/vendor_completions.d/wireview.fish
 /usr/bin/wireviewd
 /usr/bin/wireview
+/usr/bin/wireview-gui
 /usr/lib/systemd/system/wireviewd.service
 /usr/lib/systemd/system/wireviewd.socket
 /usr/lib/sysusers.d/wireview.conf
 /usr/lib/udev/rules.d/70-wireview-pro-ii.rules
 /usr/share/varlink/interfaces/io.github.Gustav0ar.WireView.varlink
+/usr/share/applications/io.github.Gustav0ar.WireView.desktop
+/usr/share/icons/hicolor/scalable/apps/io.github.Gustav0ar.WireView.svg
 
 %changelog
 * @RPM_DATE@ wireviewd contributors - @VERSION@-1

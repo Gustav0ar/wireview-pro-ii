@@ -1,0 +1,348 @@
+export struct Conductor {
+    id: string,
+    current: string,
+    voltage: string,
+    power: string,
+    deviation: string,
+    load: float,
+    alert: bool,
+}
+
+component SideItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+
+    height: 40px;
+    background: transparent;
+
+    Text {
+        x: 16px;
+        text: label;
+        color: active ? #D9DEE3 : #6F7780;
+        font-family: "Noto Sans";
+        font-size: 11px;
+        font-weight: active ? 700 : 500;
+        letter-spacing: 0.7px;
+        vertical-alignment: center;
+    }
+
+    Text {
+        x: parent.width - 26px;
+        width: 10px;
+        text: active ? ">" : "";
+        color: #FFB15C;
+        font-family: "Noto Sans Mono";
+        font-size: 11px;
+        vertical-alignment: center;
+    }
+}
+
+component RailMetric inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <color> accent: #D9DEE3;
+
+    height: 58px;
+    background: transparent;
+    VerticalLayout {
+        spacing: 4px;
+        Text { text: label; color: #6F7780; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; letter-spacing: 0.7px; }
+        Text { text: value; color: accent; font-family: "Noto Sans Mono"; font-size: 18px; font-weight: 700; }
+    }
+}
+
+component ConductorLane inherits Rectangle {
+    in property <Conductor> wire;
+    in property <bool> stale;
+
+    height: 102px;
+    background: wire.alert ? #100306 : transparent;
+
+    Rectangle {
+        x: 0;
+        y: parent.height / 2 - 1px;
+        width: 37px;
+        height: 2px;
+        background: wire.alert ? #FF3B5C : #3C4248;
+    }
+
+    Rectangle {
+        x: 36px;
+        y: parent.height / 2 - 15px;
+        width: 54px;
+        height: 30px;
+        background: #000000;
+        border-width: 1px;
+        border-color: wire.alert ? #FF3B5C : #4D555C;
+
+        Text {
+            text: wire.id;
+            color: wire.alert ? #FF6A82 : #D9DEE3;
+            font-family: "Orbitron";
+            font-size: 12px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        x: 89px;
+        y: parent.height / 2 - 1px;
+        width: parent.width - 108px;
+        height: 2px;
+        background: #272C31;
+
+        Rectangle {
+            width: parent.width * wire.load;
+            height: parent.height;
+            background: stale ? #656C72 : wire.alert ? #FF3B5C : #FFB15C;
+        }
+    }
+
+    Rectangle {
+        x: 89px + (parent.width - 108px) * 0.78;
+        y: parent.height / 2 - 8px;
+        width: 1px;
+        height: 16px;
+        background: #D9DEE3;
+        opacity: 0.55;
+    }
+
+    Text {
+        x: 108px;
+        y: 14px;
+        text: wire.current + " A";
+        color: stale ? #6F7780 : wire.alert ? #FF6A82 : #FFB15C;
+        font-family: "Noto Sans Mono";
+        font-size: 18px;
+        font-weight: 700;
+    }
+
+    Text {
+        x: 270px;
+        y: 17px;
+        text: wire.voltage + " V";
+        color: stale ? #6F7780 : #7CCBFF;
+        font-family: "Noto Sans Mono";
+        font-size: 13px;
+    }
+
+    Text {
+        x: 392px;
+        y: 17px;
+        text: wire.power + " W";
+        color: stale ? #6F7780 : #D9DEE3;
+        font-family: "Noto Sans Mono";
+        font-size: 13px;
+    }
+
+    Text {
+        x: parent.width - 102px;
+        y: 17px;
+        width: 84px;
+        text: wire.deviation;
+        color: wire.alert ? #FF6A82 : #6F7780;
+        font-family: "Noto Sans Mono";
+        font-size: 11px;
+        horizontal-alignment: right;
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: #202429;
+    }
+}
+
+export component ConductorField inherits Window {
+    title: "WireView Pro II - Conductor field";
+    width: 1440px;
+    height: 900px;
+    background: #000000;
+
+    in property <bool> connected: true;
+    in property <bool> stale: false;
+    in property <bool> faulted: true;
+    in property <string> connection-label: "FAULT";
+    in property <string> sample-age: "LIVE  0.2 S";
+    in property <string> active-fault-count: "2";
+
+    private property <[Conductor]> wires: [
+        { id: "P1", current: "8.42", voltage: "12.03", power: "101.3", deviation: "+0.1%", load: 0.62, alert: false },
+        { id: "P2", current: "8.55", voltage: "12.02", power: "102.8", deviation: "+1.5%", load: 0.63, alert: false },
+        { id: "P3", current: faulted ? "13.60" : "9.60", voltage: faulted ? "11.98" : "12.02", power: faulted ? "162.9" : "115.4", deviation: faulted ? "+40%" : "+8.5%", load: faulted ? 1.0 : 0.71, alert: faulted },
+        { id: "P4", current: "7.40", voltage: "12.01", power: "88.9", deviation: "-24%", load: 0.54, alert: false },
+        { id: "P5", current: "7.31", voltage: "12.04", power: "88.0", deviation: "-25%", load: 0.54, alert: false },
+        { id: "P6", current: "7.32", voltage: "12.03", power: "88.1", deviation: "-25%", load: 0.54, alert: false },
+    ];
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 64px;
+        background: #000000;
+
+        Text { x: 22px; y: 19px; text: "WIREVIEW"; color: #D9DEE3; font-family: "Orbitron"; font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+        Text { x: 138px; y: 24px; text: "PRO II"; color: #FFB15C; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { x: 224px; y: 23px; text: "LIVE CONDUCTOR FIELD"; color: #6F7780; font-family: "Noto Sans"; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+
+        Text { x: parent.width - 404px; y: 22px; width: 130px; text: "SESSION 84"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 10px; horizontal-alignment: right; }
+        Text { x: parent.width - 256px; y: 22px; width: 112px; text: sample-age; color: stale ? #6F7780 : #7CCBFF; font-family: "Noto Sans Mono"; font-size: 10px; horizontal-alignment: right; }
+        Rectangle { x: parent.width - 122px; y: 27px; width: 8px; height: 8px; background: stale ? #6F7780 : faulted ? #FF3B5C : #FFB15C; }
+        Text { x: parent.width - 104px; y: 22px; width: 82px; text: connection-label; color: stale ? #6F7780 : faulted ? #FF6A82 : #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; font-weight: 700; }
+
+        Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #272C31; }
+    }
+
+    Rectangle {
+        x: 0;
+        y: 64px;
+        width: 238px;
+        height: parent.height - 64px;
+        background: #070809;
+
+        Text { x: 20px; y: 24px; text: "TOTAL POWER"; color: #6F7780; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+        Text { x: 18px; y: 53px; text: faulted ? "632" : "584"; color: stale ? #6F7780 : #D9DEE3; font-family: "Orbitron"; font-size: 49px; font-weight: 700; }
+        Text { x: 177px; y: 82px; text: faulted ? ".4 W" : ".9 W"; color: #FFB15C; font-family: "Noto Sans Mono"; font-size: 13px; font-weight: 700; }
+        Text { x: 20px; y: 120px; text: "LIMIT  660 W"; color: faulted ? #FF6A82 : #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; }
+
+        Rectangle { x: 20px; y: 150px; width: parent.width - 40px; height: 3px; background: #272C31;
+            Rectangle { width: parent.width * (faulted ? 0.958 : 0.886); height: parent.height; background: faulted ? #FF3B5C : #FFB15C; }
+        }
+
+        VerticalLayout {
+            x: 20px;
+            y: 190px;
+            width: parent.width - 40px;
+            spacing: 14px;
+            RailMetric { label: "VOLTAGE"; value: "12.02 V"; accent: #7CCBFF; }
+            RailMetric { label: "CURRENT"; value: faulted ? "52.60 A" : "48.60 A"; accent: #FFB15C; }
+            RailMetric { label: "INPUT TEMP"; value: faulted ? "92.4 C" : "48.2 C"; accent: faulted ? #FF6A82 : #D9DEE3; }
+            RailMetric { label: "OUTPUT TEMP"; value: "47.8 C"; }
+            RailMetric { label: "FAN / CURVE"; value: "78%"; }
+        }
+
+        Rectangle { x: 20px; y: 590px; width: parent.width - 40px; height: 1px; background: #272C31; }
+
+        VerticalLayout {
+            x: 4px;
+            y: 616px;
+            width: parent.width - 8px;
+            spacing: 0px;
+            SideItem { label: "OVERVIEW"; }
+            SideItem { label: "PINS"; active: true; }
+            SideItem { label: "FAULTS  " + active-fault-count; }
+            SideItem { label: "HISTORY"; }
+            SideItem { label: "CONFIGURE"; }
+        }
+
+        Rectangle { x: parent.width - 1px; width: 1px; height: parent.height; background: #272C31; }
+    }
+
+    Rectangle {
+        x: 238px;
+        y: 64px;
+        width: 864px;
+        height: parent.height - 64px;
+        background: #000000;
+
+        HorizontalLayout {
+            x: 30px;
+            y: 0;
+            width: parent.width - 60px;
+            height: 70px;
+            alignment: center;
+            Text { text: "SIX CONDUCTORS"; color: #D9DEE3; font-family: "Noto Sans"; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Text { text: "MEAN 8.77 A"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 10px; }
+            Text { text: "LIMIT MARK 10.5 A"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 10px; }
+        }
+
+        Rectangle { y: 69px; width: parent.width; height: 1px; background: #272C31; }
+
+        VerticalLayout {
+            x: 28px;
+            y: 86px;
+            width: parent.width - 56px;
+            height: 612px;
+            spacing: 0px;
+            for wire in wires: ConductorLane { wire: wire; stale: root.stale; }
+        }
+
+        Rectangle {
+            x: 28px;
+            y: 730px;
+            width: parent.width - 56px;
+            height: 76px;
+            background: transparent;
+            border-width: 1px;
+            border-color: #272C31;
+
+            Text { x: 16px; y: 13px; text: "GEOMETRY READ"; color: #6F7780; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; letter-spacing: 0.8px; }
+            Text { x: 16px; y: 37px; text: faulted ? "P3 is 40% above the six-wire mean. P4-P6 carry less current." : "All six conductors remain within the configured balance threshold."; color: faulted ? #FF6A82 : #D9DEE3; font-family: "Noto Sans Mono"; font-size: 11px; }
+        }
+    }
+
+    Rectangle {
+        x: 1102px;
+        y: 64px;
+        width: parent.width - 1102px;
+        height: parent.height - 64px;
+        background: #070809;
+
+        Text { x: 22px; y: 24px; text: "PROTECTION"; color: #6F7780; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+        Text { x: 22px; y: 55px; text: faulted ? "2 ACTIVE" : "CLEAR"; color: faulted ? #FF6A82 : #D9DEE3; font-family: "Orbitron"; font-size: 22px; font-weight: 700; }
+        Text { x: 22px; y: 91px; text: "1 RECORDED"; color: #7CCBFF; font-family: "Noto Sans Mono"; font-size: 10px; }
+
+        Rectangle { x: 22px; y: 130px; width: parent.width - 44px; height: 1px; background: #272C31; }
+
+        Rectangle {
+            x: 22px;
+            y: 158px;
+            width: parent.width - 44px;
+            height: 164px;
+            background: faulted ? #100306 : #000000;
+            border-width: 1px;
+            border-color: faulted ? #7D2032 : #272C31;
+
+            Rectangle { x: 0; width: 3px; height: parent.height; background: faulted ? #FF3B5C : #FFB15C; }
+            Text { x: 18px; y: 17px; text: faulted ? "WIRE OVER CURRENT" : "NO ACTIVE FAULT"; color: faulted ? #FF6A82 : #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+            Text { x: 18px; y: 47px; width: parent.width - 36px; text: faulted ? "P3 carries 13.60 A." : "Protection remains armed."; color: #D9DEE3; font-family: "Noto Sans"; font-size: 15px; font-weight: 700; wrap: word-wrap; }
+            Text { x: 18px; y: 88px; width: parent.width - 36px; text: faulted ? "Limit 10.5 A. Reduce load and inspect the connector." : "Recorded events remain available below."; color: #8B9298; font-family: "Noto Sans"; font-size: 11px; wrap: word-wrap; }
+            Text { x: 18px; y: 137px; text: faulted ? "REVIEW AND CLEAR  >" : "VIEW RECORDED  >"; color: faulted ? #FF6A82 : #7CCBFF; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        }
+
+        Text { x: 22px; y: 356px; text: "RECORDED / 01"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { x: 22px; y: 384px; width: parent.width - 44px; text: "Current imbalance"; color: #D9DEE3; font-family: "Noto Sans"; font-size: 13px; font-weight: 700; }
+        Text { x: 22px; y: 410px; width: parent.width - 44px; text: "Observed during this hardware session."; color: #6F7780; font-family: "Noto Sans"; font-size: 10px; }
+
+        Rectangle { x: 22px; y: 456px; width: parent.width - 44px; height: 1px; background: #272C31; }
+
+        Text { x: 22px; y: 484px; text: "DEVICE DISPLAY"; color: #6F7780; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; letter-spacing: 0.8px; }
+        Text { x: 22px; y: 514px; text: "CURRENT"; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 17px; font-weight: 700; }
+        Text { x: 22px; y: 550px; text: "CHANGE SCREEN  >"; color: #7CCBFF; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+
+        Rectangle { x: 22px; y: 598px; width: parent.width - 44px; height: 1px; background: #272C31; }
+
+        Text { x: 22px; y: 626px; text: "DAEMON"; color: #6F7780; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; }
+        Text { x: 22px; y: 653px; text: "wireviewd 1.1.1"; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 11px; }
+        Text { x: 22px; y: 678px; text: "/dev/ttyACM0"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 10px; }
+
+        Rectangle {
+            x: 22px;
+            y: 732px;
+            width: parent.width - 44px;
+            height: 74px;
+            background: #000000;
+            border-width: 1px;
+            border-color: #272C31;
+            Text { x: 14px; y: 13px; text: stale ? "VALUES FROZEN" : "POLL 500 MS"; color: stale ? #D9DEE3 : #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+            Text { x: 14px; y: 36px; width: parent.width - 28px; text: stale ? "Reconnect to resume live measurements." : "MONITOR STREAM ACTIVE"; color: stale ? #6F7780 : #7CCBFF; font-family: "Noto Sans"; font-size: 10px; wrap: word-wrap; }
+        }
+
+        Rectangle { x: 0; width: 1px; height: parent.height; background: #272C31; }
+    }
+}

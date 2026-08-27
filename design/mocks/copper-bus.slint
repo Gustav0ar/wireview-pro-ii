@@ -1,0 +1,410 @@
+export struct PinReading {
+    name: string,
+    voltage: string,
+    current: string,
+    power: string,
+    load: float,
+    delta: string,
+    alert: bool,
+}
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+
+    height: 46px;
+    background: transparent;
+
+    Rectangle {
+        x: 0;
+        width: 3px;
+        height: parent.height;
+        background: active ? #F47A2A : transparent;
+    }
+
+    Text {
+        x: 19px;
+        text: label;
+        color: active ? #F5F7F8 : #737A80;
+        font-family: "Noto Sans";
+        font-size: 13px;
+        font-weight: active ? 700 : 500;
+        letter-spacing: 0.5px;
+        vertical-alignment: center;
+    }
+}
+
+component Metric inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> unit;
+    in property <color> accent: #8DD7FF;
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 5px;
+        Text {
+            text: label;
+            color: #737A80;
+            font-family: "Noto Sans";
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 7px;
+            Text {
+                text: value;
+                color: accent;
+                font-family: "Noto Sans Mono";
+                font-size: 25px;
+                font-weight: 700;
+                vertical-alignment: bottom;
+            }
+            Text {
+                text: unit;
+                color: #8B9298;
+                font-family: "Noto Sans Mono";
+                font-size: 11px;
+                vertical-alignment: bottom;
+            }
+        }
+    }
+}
+
+component PinCell inherits Rectangle {
+    in property <PinReading> pin;
+
+    height: 46px;
+    background: transparent;
+    border-width: 0px;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 13px;
+        alignment: center;
+
+        Text {
+            width: 34px;
+            text: pin.name;
+            color: pin.alert ? #FF476F : #F5F7F8;
+            font-family: "Orbitron";
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        Rectangle {
+            width: 2px;
+            height: 30px;
+            background: pin.alert ? #FF476F : #F47A2A;
+        }
+
+        VerticalLayout {
+            width: 86px;
+            spacing: 2px;
+            Text { text: "VOLTAGE"; color: #626A70; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; }
+            Text { text: pin.voltage + " V"; color: #DDE2E5; font-family: "Noto Sans Mono"; font-size: 13px; }
+        }
+
+        VerticalLayout {
+            width: 86px;
+            spacing: 2px;
+            Text { text: "CURRENT"; color: #626A70; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; }
+            Text { text: pin.current + " A"; color: pin.alert ? #FF7892 : #8DD7FF; font-family: "Noto Sans Mono"; font-size: 13px; }
+        }
+
+        VerticalLayout {
+            width: 80px;
+            spacing: 2px;
+            Text { text: "POWER"; color: #626A70; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; }
+            Text { text: pin.power + " W"; color: #DDE2E5; font-family: "Noto Sans Mono"; font-size: 13px; }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 3px;
+            background: #23272A;
+            Rectangle {
+                width: parent.width * pin.load;
+                height: parent.height;
+                background: pin.alert ? #FF476F : #F47A2A;
+            }
+        }
+
+        Text {
+            width: 58px;
+            text: pin.delta;
+            color: pin.alert ? #FF7892 : #8B9298;
+            font-family: "Noto Sans Mono";
+            font-size: 11px;
+            horizontal-alignment: right;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        width: parent.width;
+        background: #171A1C;
+    }
+}
+
+export component CopperBus inherits Window {
+    title: "WireView Pro II - Copper bus";
+    width: 1440px;
+    height: 900px;
+    background: #000000;
+
+    in property <bool> connected: true;
+    in property <bool> stale: false;
+    in property <bool> faulted: true;
+    in property <string> connection-label: "FAULT";
+    in property <string> sample-age: "LIVE  0.2 S";
+    in property <string> active-fault-count: "2";
+
+    private property <[PinReading]> pins: [
+        { name: "P1", voltage: "12.03", current: "8.42", power: "101.3", load: 0.80, delta: "+0.1%", alert: false },
+        { name: "P2", voltage: "12.02", current: "8.55", power: "102.8", load: 0.81, delta: "+1.5%", alert: false },
+        { name: "P3", voltage: faulted ? "11.98" : "12.02", current: faulted ? "13.60" : "9.60", power: faulted ? "162.9" : "115.4", load: faulted ? 1.0 : 0.76, delta: faulted ? "+40%" : "+8.5%", alert: faulted },
+        { name: "P4", voltage: "12.01", current: "7.40", power: "88.9", load: 0.70, delta: "-24%", alert: false },
+        { name: "P5", voltage: "12.04", current: "7.31", power: "88.0", load: 0.69, delta: "-25%", alert: false },
+        { name: "P6", voltage: "12.03", current: "7.32", power: "88.1", load: 0.69, delta: "-25%", alert: false },
+    ];
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 196px;
+        height: parent.height;
+        background: #050607;
+
+        Text {
+            x: 24px;
+            y: 28px;
+            text: "WIREVIEW";
+            color: #F5F7F8;
+            font-family: "Orbitron";
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        Text {
+            x: 24px;
+            y: 52px;
+            text: "PRO II / LINUX";
+            color: #F47A2A;
+            font-family: "Noto Sans Mono";
+            font-size: 10px;
+            letter-spacing: 1px;
+        }
+
+        VerticalLayout {
+            x: 0;
+            y: 119px;
+            width: parent.width;
+            spacing: 1px;
+            NavItem { label: "OVERVIEW"; active: true; }
+            NavItem { label: "PINS"; }
+            NavItem { label: "FAULTS  " + active-fault-count; }
+            NavItem { label: "HISTORY"; }
+            NavItem { label: "CONFIGURE"; }
+            NavItem { label: "THEME"; }
+            NavItem { label: "DEVICE"; }
+        }
+
+        VerticalLayout {
+            x: 24px;
+            y: parent.height - 102px;
+            width: 150px;
+            spacing: 8px;
+            Text { text: "DAEMON  1.1.1"; color: #5E666C; font-family: "Noto Sans Mono"; font-size: 10px; }
+            Text { text: "API 2 / SESSION 84"; color: #5E666C; font-family: "Noto Sans Mono"; font-size: 10px; }
+            Text { text: "/dev/ttyACM0"; color: #8B9298; font-family: "Noto Sans Mono"; font-size: 10px; }
+        }
+
+        Rectangle { x: parent.width - 1px; width: 1px; height: parent.height; background: #171A1C; }
+    }
+
+    Rectangle {
+        x: 196px;
+        y: 0;
+        width: parent.width - 196px;
+        height: 72px;
+        background: #000000;
+
+        HorizontalLayout {
+            x: 28px;
+            y: 0;
+            width: parent.width - 56px;
+            height: parent.height;
+            alignment: center;
+            spacing: 16px;
+
+            Rectangle { width: 8px; height: 8px; border-radius: 0px; background: stale ? #6C7379 : faulted ? #FF476F : #F47A2A; }
+            Text {
+                text: connection-label;
+                color: stale ? #8B9298 : faulted ? #FF7892 : #F5F7F8;
+                font-family: "Noto Sans";
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 1px;
+            }
+            Text { text: "WIREVIEW PRO II"; color: #8B9298; font-family: "Noto Sans"; font-size: 12px; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Text { text: sample-age; color: stale ? #8B9298 : #8DD7FF; font-family: "Noto Sans Mono"; font-size: 11px; }
+            Text { text: "SCREEN  CURRENT"; color: #8B9298; font-family: "Noto Sans Mono"; font-size: 11px; }
+        }
+
+        Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #25292D; }
+    }
+
+    Rectangle {
+        x: 224px;
+        y: 98px;
+        width: 330px;
+        height: 672px;
+        background: transparent;
+
+        Text { x: 0; y: 0; text: "LIVE LOAD"; color: #737A80; font-family: "Noto Sans"; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+        Text { x: 0; y: 34px; text: faulted ? "632.4" : "584.9"; color: stale ? #72777B : #F5F7F8; font-family: "Orbitron"; font-size: 68px; font-weight: 700; }
+        Text { x: 274px; y: 84px; text: "W"; color: #F47A2A; font-family: "Noto Sans Mono"; font-size: 18px; font-weight: 700; }
+        Text { x: 2px; y: 124px; text: faulted ? "95.8% OF 660 W LIMIT" : "88.6% OF 660 W LIMIT"; color: faulted ? #FF7892 : #F47A2A; font-family: "Noto Sans Mono"; font-size: 11px; }
+
+        Rectangle {
+            x: 0; y: 160px; width: parent.width; height: 5px; background: #25292D;
+            Rectangle { width: parent.width * (faulted ? 0.958 : 0.886); height: parent.height; background: faulted ? #FF476F : #F47A2A; }
+        }
+
+        GridLayout {
+            x: 0;
+            y: 214px;
+            width: parent.width;
+            height: 220px;
+            spacing: 24px;
+            Metric { row: 0; col: 0; label: "VOLTAGE"; value: "12.02"; unit: "V"; }
+            Metric { row: 0; col: 1; label: "CURRENT"; value: faulted ? "52.60" : "48.60"; unit: "A"; }
+            Metric { row: 1; col: 0; label: "INPUT"; value: faulted ? "92.4" : "48.2"; unit: "C"; accent: faulted ? #FF7892 : #8DD7FF; }
+            Metric { row: 1; col: 1; label: "OUTPUT"; value: "47.8"; unit: "C"; }
+        }
+
+        Rectangle { x: 0; y: 464px; width: parent.width; height: 1px; background: #25292D; }
+
+        HorizontalLayout {
+            x: 0;
+            y: 492px;
+            width: parent.width;
+            height: 84px;
+            spacing: 28px;
+            VerticalLayout {
+                Text { text: "FAN"; color: #737A80; font-family: "Noto Sans"; font-size: 10px; font-weight: 700; }
+                Text { text: "78%"; color: #F5F7F8; font-family: "Noto Sans Mono"; font-size: 23px; font-weight: 700; }
+                Text { text: "CURVE / INPUT"; color: #5E666C; font-family: "Noto Sans Mono"; font-size: 9px; }
+            }
+            Rectangle { width: 1px; height: 68px; background: #25292D; }
+            VerticalLayout {
+                Text { text: "CABLE"; color: #737A80; font-family: "Noto Sans"; font-size: 10px; font-weight: 700; }
+                Text { text: "600 W"; color: #F5F7F8; font-family: "Noto Sans Mono"; font-size: 23px; font-weight: 700; }
+                Text { text: "12VHPWR"; color: #5E666C; font-family: "Noto Sans Mono"; font-size: 9px; }
+            }
+        }
+
+        Rectangle {
+            x: 0;
+            y: 612px;
+            width: parent.width;
+            height: 60px;
+            background: faulted ? #120509 : #08090A;
+            border-width: 1px;
+            border-color: faulted ? #702336 : #25292D;
+            Text { x: 14px; y: 10px; text: faulted ? "2 ACTIVE FAULTS" : "NO ACTIVE FAULTS"; color: faulted ? #FF7892 : #8DD7FF; font-family: "Noto Sans"; font-size: 11px; font-weight: 700; }
+            Text { x: 14px; y: 31px; text: faulted ? "P3 wire current / connector temp" : "Protection registers are clear"; color: #8B9298; font-family: "Noto Sans Mono"; font-size: 10px; }
+        }
+    }
+
+    Rectangle {
+        x: 582px;
+        y: 98px;
+        width: parent.width - 610px;
+        height: 320px;
+        background: #030404;
+        border-width: 1px;
+        border-color: #25292D;
+        clip: true;
+
+        Text { x: 20px; y: 17px; text: "POWER / 120 S"; color: #737A80; font-family: "Noto Sans"; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+        Text { x: parent.width - 124px; y: 17px; width: 104px; text: "PEAK 641.8 W"; color: #8B9298; font-family: "Noto Sans Mono"; font-size: 10px; horizontal-alignment: right; }
+
+        Rectangle { x: 20px; y: 78px; width: parent.width - 40px; height: 1px; background: #15181A; }
+        Rectangle { x: 20px; y: 142px; width: parent.width - 40px; height: 1px; background: #15181A; }
+        Rectangle { x: 20px; y: 206px; width: parent.width - 40px; height: 1px; background: #15181A; }
+        Rectangle { x: 20px; y: 270px; width: parent.width - 40px; height: 1px; background: #15181A; }
+
+        Path {
+            x: 20px;
+            y: 60px;
+            width: parent.width - 40px;
+            height: 220px;
+            viewbox-width: 100;
+            viewbox-height: 100;
+            commands: "M 0 74 L 5 70 L 10 72 L 15 63 L 20 65 L 25 59 L 30 61 L 35 55 L 40 58 L 45 48 L 50 52 L 55 46 L 60 50 L 65 39 L 70 44 L 75 35 L 80 42 L 85 31 L 90 36 L 95 25 L 100 29";
+            stroke: stale ? #555B60 : faulted ? #FF476F : #F47A2A;
+            stroke-width: 1.6px;
+            fill: transparent;
+            fit: fill;
+        }
+
+        Rectangle { x: 20px; y: 282px; width: parent.width - 40px; height: 2px; background: #F47A2A; opacity: stale ? 0.25 : 0.8; }
+        Text { x: 20px; y: 292px; text: "-120 S"; color: #52585D; font-family: "Noto Sans Mono"; font-size: 9px; }
+        Text { x: parent.width - 50px; y: 292px; text: "NOW"; color: #52585D; font-family: "Noto Sans Mono"; font-size: 9px; }
+    }
+
+    Rectangle {
+        x: 582px;
+        y: 442px;
+        width: parent.width - 610px;
+        height: 328px;
+        background: transparent;
+        border-width: 1px;
+        border-color: #25292D;
+
+        HorizontalLayout {
+            x: 16px;
+            y: 0;
+            width: parent.width - 32px;
+            height: 50px;
+            alignment: center;
+            Text { text: "SIX-PIN BALANCE"; color: #F5F7F8; font-family: "Noto Sans"; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Text { text: "MEAN 8.77 A"; color: #737A80; font-family: "Noto Sans Mono"; font-size: 10px; }
+        }
+
+        Rectangle { x: 0; y: 49px; width: parent.width; height: 1px; background: #25292D; }
+
+        VerticalLayout {
+            x: 0;
+            y: 50px;
+            width: parent.width;
+            height: parent.height - 50px;
+            for pin in pins: PinCell { pin: pin; }
+        }
+    }
+
+    Rectangle {
+        x: 196px;
+        y: 798px;
+        width: parent.width - 196px;
+        height: 102px;
+        background: faulted ? #100307 : #050607;
+        border-width: 0px;
+
+        Rectangle { width: parent.width; height: 1px; background: faulted ? #8F2941 : #25292D; }
+        Rectangle { x: 28px; y: 24px; width: 4px; height: 54px; background: faulted ? #FF476F : #F47A2A; }
+        Text { x: 50px; y: 22px; text: faulted ? "P3 EXCEEDS THE 10.5 A WIRE LIMIT" : "POWER DELIVERY IS WITHIN CONFIGURED LIMITS"; color: faulted ? #FF7892 : #F5F7F8; font-family: "Noto Sans"; font-size: 15px; font-weight: 700; }
+        Text { x: 50px; y: 49px; text: faulted ? "Reduce load, then inspect the connector and cable before clearing the fault." : "No active protection response. One recorded imbalance remains available in Faults."; color: #9AA1A6; font-family: "Noto Sans"; font-size: 12px; }
+        Text { x: parent.width - 190px; y: 39px; width: 150px; text: faulted ? "OPEN FAULTS  >" : "VIEW DETAILS  >"; color: faulted ? #FF7892 : #8DD7FF; font-family: "Noto Sans Mono"; font-size: 11px; font-weight: 700; horizontal-alignment: right; }
+    }
+}

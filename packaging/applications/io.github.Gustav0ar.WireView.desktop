@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=WireView Pro II
+GenericName=Power Cable Monitor
+Comment=Monitor and configure a WireView Pro II
+TryExec=wireview-gui
+Exec=wireview-gui
+Icon=io.github.Gustav0ar.WireView
+Terminal=false
+Categories=System;Monitor;
+Keywords=WireView;GPU;power;current;temperature;telemetry;
+StartupNotify=true
+StartupWMClass=io.github.Gustav0ar.WireView

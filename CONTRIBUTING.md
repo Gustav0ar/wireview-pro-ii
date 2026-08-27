@@ -15,11 +15,12 @@ Before submitting a change, run:
 
 ```bash
 cargo fmt --all --check
-cargo check --all-targets --locked
-cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo test --all-targets --locked
+cargo check --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-targets --locked
 cargo deny check
 bash scripts/smoke-varlink.sh
+bash scripts/smoke-gui.sh
 bash scripts/validate-packaging.sh
 cargo check --manifest-path fuzz/Cargo.toml
 ```
@@ -34,8 +35,8 @@ Before publishing a hardware-qualified package, follow
 `docs/release-qualification.md`. The runner is opt-in and preserves its
 evidence under `target/`.
 
-Protocol changes should include focused decoder fixtures or deterministic backend
-tests. Lifecycle changes should cover disconnects, serial errors, duplicate
-devices, and session transitions. Never include vendor firmware, serial
-captures containing private identifiers, or decompiled vendor binaries in a
-commit.
+Protocol changes should include focused decoder fixtures or deterministic
+backend tests. Lifecycle changes should cover disconnects, serial errors,
+duplicate devices, and session transitions. Never include vendor firmware,
+serial captures containing private identifiers, or decompiled vendor binaries
+in a commit.

@@ -7,12 +7,17 @@ on:
       - '.github/workflows/packages.yml'
       - 'Cargo.lock'
       - 'Cargo.toml'
+      - 'CONTEXT.md'
       - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'docs/desktop.md'
       - 'src/**'
       - 'interfaces/**'
       - 'packaging/**'
       - 'scripts/build-*.sh'
       - 'scripts/install-staged.sh'
+      - 'scripts/project-metadata.sh'
+      - 'scripts/smoke-gui.sh'
       - 'scripts/validate-packaging.sh'
   push:
     branches:
@@ -38,15 +43,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.97.1
       - name: Plan package build or release
         id: plan
         shell: bash
         run: |
           set -euo pipefail
 
-          version="$(
-            sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1
-          )"
+          version="$(bash scripts/project-metadata.sh version)"
           test -n "${version}"
           source_epoch="$(git show -s --format=%ct HEAD)"
           build_id="git-$(git rev-parse --short=12 HEAD)-$(
@@ -64,8 +70,14 @@ jobs:
                   "${GITHUB_REF}" == refs/heads/main ]]; then
             previous_version="$(
               git show "${{ github.event.before }}:Cargo.toml" 2>/dev/null \
-                | sed -n 's/^version = "\(.*\)"/\1/p' \
-                | head -1 \
+                | python3 -c '
+          import sys
+          import tomllib
+
+          manifest = tomllib.load(sys.stdin.buffer)
+          workspace_version = manifest.get("workspace", {}).get("package", {}).get("version")
+          print(workspace_version or manifest["package"]["version"])
+          ' \
                 || true
             )"
 
@@ -129,7 +141,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes dpkg-dev libudev-dev
+          sudo apt-get install --yes \
+            dpkg-dev \
+            libfontconfig1-dev \
+            libudev-dev \
+            xvfb
       - run: bash scripts/build-packages.sh deb
       - name: Test Debian package lifecycle
         run: |
@@ -152,12 +168,20 @@ jobs:
           sudo apt-get install --yes ./dist/*.deb
           cli_version="$(wireview version)"
           daemon_version="$(wireviewd --version)"
+          gui_version="$(wireview-gui --version)"
           echo "${cli_version}"
           echo "${daemon_version}"
+          echo "${gui_version}"
           test "${daemon_version}" = "${cli_version/wireview /wireviewd }"
+          test "${gui_version}" = "${cli_version/wireview /wireview-gui }"
           sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/deb.build-id
           test -s dist/deb.build-id
           test -f /usr/lib/systemd/system/wireviewd.socket
+          test -f /usr/share/applications/io.github.Gustav0ar.WireView.desktop
+          test -f /usr/share/icons/hicolor/scalable/apps/io.github.Gustav0ar.WireView.svg
+          WIREVIEW_SKIP_BUILD=1 \
+            WIREVIEW_SMOKE_BIN_DIR=/usr/bin \
+            bash scripts/smoke-gui.sh
           sudo -u "$(id -un)" -g wireview-client wireview status | grep -Fq 'api=2'
           sudo systemctl stop wireviewd.service
           test "$(systemctl is-active wireviewd.socket)" = active
@@ -167,6 +191,7 @@ jobs:
           sudo -u "$(id -un)" -g wireview-client wireview status | grep -Fq 'api=2'
           sudo apt-get remove --yes wireviewd
           test ! -e /usr/bin/wireview
+          test ! -e /usr/bin/wireview-gui
           sudo rm -f /etc/systemd/system/wireviewd.service.d/ci.conf
           sudo rmdir --ignore-fail-on-non-empty /etc/systemd/system/wireviewd.service.d
           sudo systemctl daemon-reload
@@ -190,7 +215,10 @@ jobs:
       WIREVIEW_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
     steps:
       - name: Install runner dependencies
-        run: dnf install --assumeyes gcc git libudev-devel rpm-build
+        run: >-
+          dnf install --assumeyes
+          fontconfig-devel gcc git libudev-devel python3 rpm-build
+          xorg-x11-server-Xvfb
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
         with:
@@ -206,14 +234,23 @@ jobs:
           dnf upgrade --assumeyes dist/*.rpm
           cli_version="$(wireview version)"
           daemon_version="$(wireviewd --version)"
+          gui_version="$(wireview-gui --version)"
           echo "${cli_version}"
           echo "${daemon_version}"
+          echo "${gui_version}"
           test "${daemon_version}" = "${cli_version/wireview /wireviewd }"
+          test "${gui_version}" = "${cli_version/wireview /wireview-gui }"
           sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/rpm.build-id
           test -s dist/rpm.build-id
           test -f /usr/lib/systemd/system/wireviewd.socket
+          test -f /usr/share/applications/io.github.Gustav0ar.WireView.desktop
+          test -f /usr/share/icons/hicolor/scalable/apps/io.github.Gustav0ar.WireView.svg
+          WIREVIEW_SKIP_BUILD=1 \
+            WIREVIEW_SMOKE_BIN_DIR=/usr/bin \
+            bash scripts/smoke-gui.sh
           dnf remove --assumeyes wireviewd
           test ! -e /usr/bin/wireview
+          test ! -e /usr/bin/wireview-gui
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wireviewd-rpm
@@ -233,7 +270,9 @@ jobs:
       WIREVIEW_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
     steps:
       - name: Install runner dependencies
-        run: pacman -Syu --noconfirm git rustup systemd
+        run: >-
+          pacman -Syu --noconfirm
+          fontconfig git python rustup systemd xorg-server-xvfb
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure unprivileged package builder
         run: |
@@ -253,14 +292,23 @@ jobs:
           pacman -U --noconfirm dist/*.pkg.tar.zst
           cli_version="$(wireview version)"
           daemon_version="$(wireviewd --version)"
+          gui_version="$(wireview-gui --version)"
           echo "${cli_version}"
           echo "${daemon_version}"
+          echo "${gui_version}"
           test "${daemon_version}" = "${cli_version/wireview /wireviewd }"
+          test "${gui_version}" = "${cli_version/wireview /wireview-gui }"
           sed -n 's/.*(build \(.*\))$/\1/p' <<<"${cli_version}" >dist/arch.build-id
           test -s dist/arch.build-id
           test -f /usr/lib/systemd/system/wireviewd.socket
+          test -f /usr/share/applications/io.github.Gustav0ar.WireView.desktop
+          test -f /usr/share/icons/hicolor/scalable/apps/io.github.Gustav0ar.WireView.svg
+          WIREVIEW_SKIP_BUILD=1 \
+            WIREVIEW_SMOKE_BIN_DIR=/usr/bin \
+            bash scripts/smoke-gui.sh
           pacman -R --noconfirm wireviewd
           test ! -e /usr/bin/wireview
+          test ! -e /usr/bin/wireview-gui
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wireviewd-arch
@@ -290,7 +338,7 @@ jobs:
           EXPECTED_BUILD_ID: ${{ needs.release-plan.outputs.build_id }}
           RELEASE_TAG: ${{ needs.release-plan.outputs.tag }}
         run: |
-          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          version="${{ needs.release-plan.outputs.version }}"
           test "v${version}" = "${RELEASE_TAG}"
           test "${RELEASE_TAG}" = "${GITHUB_REF_NAME}"
           test "$(find release -maxdepth 1 -name '*.build-id' -type f | wc -l)" -eq 3

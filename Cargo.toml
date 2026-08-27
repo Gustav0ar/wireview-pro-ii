@@ -1,45 +1,81 @@
 [package]
 name = "wireviewd"
-version = "1.1.1"
-edition = "2024"
-rust-version = "1.97.1"
-description = "Linux daemon and CLI for the Thermal Grizzly WireView Pro II"
-license = "MIT"
-authors = ["wireviewd contributors"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Linux desktop app, daemon, and CLI for the Thermal Grizzly WireView Pro II"
+license.workspace = true
+authors.workspace = true
 readme = "README.md"
-homepage = "https://github.com/Gustav0ar/wireview-pro-ii"
-repository = "https://github.com/Gustav0ar/wireview-pro-ii"
+homepage.workspace = true
+repository.workspace = true
 keywords = ["wireview", "telemetry", "usb", "hardware", "daemon"]
 categories = ["command-line-utilities", "hardware-support"]
+publish.workspace = true
+
+[workspace]
+members = [
+    ".",
+    "crates/wireview-core",
+    "crates/wireview-gui",
+    "crates/wireview-ipc",
+]
+resolver = "3"
+
+[workspace.package]
+version = "1.2.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT"
+authors = ["wireviewd contributors"]
+homepage = "https://github.com/Gustav0ar/wireview-pro-ii"
+repository = "https://github.com/Gustav0ar/wireview-pro-ii"
 publish = false
 
-[dependencies]
-async-trait = "0.1.89"
-clap = { version = "4.6.4", features = ["derive"] }
-clap_complete = "4.6.8"
-clap_mangen = "0.3.0"
+[workspace.dependencies]
+clap = "4.6.4"
 futures-util = "0.3.32"
-listenfd = "1.0.2"
-serde = { version = "1.0.228", features = ["derive"] }
+serde = "1.0.228"
 serde_json = "1.0.149"
 sha2 = "0.11.0"
 thiserror = "2.0.19"
-tokio = { version = "1.53.1", features = ["io-util", "macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = "1.53.1"
+wireview-core = { path = "crates/wireview-core" }
+wireview-ipc = { path = "crates/wireview-ipc" }
+zlink = "=0.7.0"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+pedantic = "allow"
+
+[dependencies]
+async-trait = "0.1.89"
+clap = { workspace = true, features = ["derive"] }
+clap_complete = "4.6.8"
+clap_mangen = "0.3.0"
+futures-util.workspace = true
+listenfd = "1.0.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-serial = "5.5.0"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
 udev = "0.9.3"
-zlink = { version = "=0.7.0", features = ["idl-parse"] }
+wireview-core.workspace = true
+wireview-ipc.workspace = true
+zlink = { workspace = true, features = ["idl-parse"] }
 
 [dev-dependencies]
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "sync", "test-util", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "test-util", "time"] }
 
-[lints.rust]
-unsafe_code = "forbid"
-
-[lints.clippy]
-all = "deny"
-pedantic = "allow"
+[lints]
+workspace = true
 
 [profile.release]
 codegen-units = 1

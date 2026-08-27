@@ -128,6 +128,14 @@ Before publishing, confirm:
 - when the optional theme gate ran, exact theme readback matched its baseline;
 - the journal contains no unexplained warnings or errors.
 
+For a release containing `wireview-gui`, also launch the packaged desktop entry
+in the target Wayland and X11 environments available to the release operator.
+Confirm that all eight pages render at 1440 x 900 and at the 1120 x 720 minimum,
+live telemetry updates without continuous animation, disconnect and reconnect
+states are visible, and guarded actions show confirmation before mutation. Use
+read-only operations on physical hardware unless the matching attended mutation
+gate above has been enabled.
+
 Calibration NVM and firmware/DFU operations are outside this checklist. They
 remain unsupported until an authenticated firmware source and verified recovery
 path are available.

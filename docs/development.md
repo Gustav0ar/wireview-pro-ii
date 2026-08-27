@@ -2,18 +2,43 @@
 
 ## Build and test
 
-Rust 1.97.1 is pinned in `rust-toolchain.toml`. Install `pkg-config` and the
-libudev development headers, then run:
+Rust 1.97.1 is pinned in `rust-toolchain.toml`. Install `pkg-config`, libudev
+development headers, Fontconfig development headers, `desktop-file-utils`, and
+Xvfb. The desktop backend loads Wayland or X11 at runtime. Then run:
 
 ```bash
-cargo build --release --locked
+cargo build --release --workspace --bins --locked
 cargo fmt --all --check
-cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo test --all-targets --locked
+cargo check --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --all-targets --locked
 cargo deny check
 bash scripts/smoke-varlink.sh
+bash scripts/smoke-gui.sh
 bash scripts/validate-packaging.sh
 ```
+
+`smoke-gui.sh` renders every page at the default and minimum supported window
+sizes in deterministic demo mode under Xvfb, then connects the desktop client
+to the real daemon process running its mock backend. The test proves startup,
+responsive layout, and event-loop stability without mutating hardware. Use the
+attended release checklist for physical-device qualification.
+
+Check a Slint source change before compiling Rust with:
+
+```bash
+slint-viewer --check crates/wireview-gui/ui/app.slint
+```
+
+Regenerate the README screenshots from the same deterministic demo data used by
+the application:
+
+```bash
+bash scripts/capture-screenshots.sh
+```
+
+The screenshot command uses Slint's offscreen software renderer and ImageMagick.
+It does not require Wayland, X11, or a connected device.
 
 ## Packages
 
@@ -29,19 +54,20 @@ bash scripts/build-packages.sh arch
 
 Artifacts, SHA-256 checksums, and an SPDX 2.3 SBOM are written to `dist/`.
 Package CI installs a synthetic prior package, upgrades it to the candidate,
-and tests removal for Debian, RPM, and Arch. Ubuntu additionally tests service
-restart and socket activation with the daemon's mock backend.
+launches every installed GUI page under Xvfb, and tests removal for Debian,
+RPM, and Arch. Ubuntu additionally tests service restart and socket activation
+with the daemon's mock backend.
 
 Release binaries use `git-SHORT_SHA-yyyyMMddHHmmss` from a clean Git checkout.
 Source-only or intentionally dirty builds use
 `source-SHORT_SHA-yyyyMMddHHmmss`. Dates are UTC and derive from
 `SOURCE_DATE_EPOCH`. Set `WIREVIEW_ALLOW_DIRTY=1` for an intentional dirty
-build, or provide a portable 1–64 character `WIREVIEW_BUILD_ID`.
+build, or provide a portable 1-64 character `WIREVIEW_BUILD_ID`.
 
-Changing the package version in `Cargo.toml` on `main` automatically creates
-the matching `v<version>` tag and runs the package workflow from that tag.
-Manually created tags remain supported and must equal `v` plus the Cargo
-version.
+Changing `workspace.package.version` in `Cargo.toml` on `main` automatically
+creates the matching `v<version>` tag and runs the package workflow from that
+tag. Manually created tags remain supported and must equal `v` plus the
+workspace version.
 
 Every release includes the Debian, RPM, and Arch packages, SHA-256 checksums,
 an SPDX SBOM, a Sigstore bundle, provenance and SBOM attestations, and a

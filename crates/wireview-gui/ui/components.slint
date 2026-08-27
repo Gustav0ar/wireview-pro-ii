@@ -1,0 +1,358 @@
+import { AppData, PinView } from "types.slint";
+
+export component FocusTouchArea {
+    in property <bool> enabled: true;
+    out property <bool> pressed <=> touch.pressed;
+    out property <bool> has-hover <=> touch.has-hover;
+    out property <bool> has-focus <=> focus.has-focus;
+    callback clicked;
+
+    forward-focus: focus;
+
+    touch := TouchArea {
+        width: root.width;
+        height: root.height;
+        enabled: root.enabled;
+        clicked => {
+            focus.focus();
+            root.clicked();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px;
+        height: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                touch.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+}
+
+export component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> danger: false;
+    in property <bool> primary: false;
+    callback clicked;
+
+    min-width: 92px;
+    height: 34px;
+    background: primary ? #D9DEE3 : danger ? #140307 : area.has-hover ? #111417 : #000000;
+    border-width: 1px;
+    border-color: area.has-focus ? #7CCBFF : danger ? #7D2032 : #343A40;
+    opacity: enabled ? 1 : 0.38;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+    forward-focus: area;
+
+    Text {
+        x: 10px;
+        width: parent.width - 20px;
+        text: root.text;
+        color: root.primary ? #000000 : root.danger ? #FF6A82 : #D9DEE3;
+        font-family: "Noto Sans Mono";
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    area := FocusTouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <int> index;
+    in property <string> suffix: "";
+    callback activated;
+
+    height: 34px;
+    background: AppData.page == index ? #0D1012 : area.has-hover ? #090B0D : transparent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => {
+        AppData.page = index;
+        root.activated();
+    }
+    forward-focus: area;
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: AppData.page == root.index ? 2px : 0px;
+        height: parent.height;
+        background: #FFB15C;
+    }
+
+    Text {
+        x: 16px;
+        width: parent.width - 48px;
+        text: root.label;
+        color: AppData.page == root.index ? #D9DEE3 : #737B83;
+        font-family: "Noto Sans";
+        font-size: 10px;
+        font-weight: AppData.page == root.index ? 700 : 500;
+        letter-spacing: 0.7px;
+        vertical-alignment: center;
+    }
+    Text {
+        x: parent.width - 42px;
+        width: 24px;
+        text: root.suffix;
+        color: root.index == 2 && AppData.active-fault-count > 0 ? #FF6A82 : #6F7780;
+        font-family: "Noto Sans Mono";
+        font-size: 9px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    area := FocusTouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            AppData.page = root.index;
+            root.activated();
+        }
+    }
+}
+
+export component SectionLabel inherits Text {
+    color: #6F7780;
+    font-family: "Noto Sans";
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    vertical-alignment: center;
+}
+
+export component RailMetric inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <color> accent: #D9DEE3;
+
+    height: 42px;
+    background: transparent;
+    SectionLabel { y: 0px; height: 13px; text: root.label; }
+    Text {
+        y: 16px;
+        height: 22px;
+        text: root.value;
+        color: root.accent;
+        font-family: "Noto Sans Mono";
+        font-size: 15px;
+        font-weight: 700;
+        vertical-alignment: center;
+    }
+}
+
+export component TextField inherits Rectangle {
+    in-out property <string> value;
+    in property <string> label: "";
+    in property <bool> enabled: true;
+    callback edited(string);
+    callback accepted(string);
+
+    height: 36px;
+    background: #000000;
+    border-width: 1px;
+    border-color: input.has-focus ? #7CCBFF : #343A40;
+    clip: true;
+    opacity: enabled ? 1 : 0.45;
+    accessible-role: text-input;
+    accessible-label: label;
+    accessible-enabled: enabled;
+    forward-focus: input;
+
+    input := TextInput {
+        x: 10px;
+        y: 1px;
+        width: parent.width - 20px;
+        height: parent.height - 2px;
+        text <=> root.value;
+        enabled: root.enabled;
+        color: #D9DEE3;
+        selection-foreground-color: #000000;
+        selection-background-color: #7CCBFF;
+        font-family: "Noto Sans Mono";
+        font-size: 11px;
+        vertical-alignment: center;
+        edited => { root.edited(self.text); }
+        accepted => { root.accepted(self.text); }
+    }
+}
+
+export component CycleField inherits Rectangle {
+    in property <string> value;
+    in property <string> label;
+    callback cycle;
+
+    height: 36px;
+    background: area.has-hover ? #101315 : #000000;
+    border-width: 1px;
+    border-color: area.has-focus ? #7CCBFF : #343A40;
+    accessible-role: button;
+    accessible-label: label + ": " + value;
+    accessible-action-default => { root.cycle(); }
+    forward-focus: area;
+
+    Text {
+        x: 10px;
+        width: parent.width - 38px;
+        text: root.value;
+        color: #D9DEE3;
+        font-family: "Noto Sans Mono";
+        font-size: 10px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Text {
+        x: parent.width - 26px;
+        width: 16px;
+        text: ">";
+        color: #7CCBFF;
+        font-family: "Noto Sans Mono";
+        font-size: 10px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    area := FocusTouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.cycle(); }
+    }
+}
+
+export component SettingField inherits Rectangle {
+    in property <string> label;
+    in property <string> detail: "";
+    height: 68px;
+    background: transparent;
+
+    SectionLabel { x: 0px; y: 0px; width: parent.width; height: 14px; text: root.label; }
+    Text {
+        x: 0px;
+        y: 19px;
+        width: parent.width;
+        height: 18px;
+        text: root.detail;
+        color: #899198;
+        font-family: "Noto Sans";
+        font-size: 10px;
+        overflow: elide;
+    }
+    @children
+}
+
+export component ConductorLane inherits Rectangle {
+    in property <PinView> wire;
+    in property <bool> compact: false;
+
+    height: compact ? 72px : 88px;
+    background: wire.alert ? #100306 : transparent;
+
+    Rectangle {
+        x: 0px;
+        y: parent.height / 2 - 1px;
+        width: 26px;
+        height: 2px;
+        background: wire.alert ? #FF3B5C : #3C4248;
+    }
+    Rectangle {
+        x: 25px;
+        y: parent.height / 2 - 14px;
+        width: 48px;
+        height: 28px;
+        background: #000000;
+        border-width: 1px;
+        border-color: wire.alert ? #FF3B5C : #4D555C;
+        Text {
+            text: wire.id;
+            color: wire.alert ? #FF6A82 : #D9DEE3;
+            font-family: "Orbitron";
+            font-size: 11px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: 72px;
+        y: parent.height / 2 - 1px;
+        width: parent.width - 84px;
+        height: 2px;
+        background: #272C31;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * min(1, max(0, root.wire.load));
+            height: parent.height;
+            background: AppData.stale ? #656C72 : root.wire.alert ? #FF3B5C : #FFB15C;
+        }
+    }
+    Rectangle {
+        x: 72px + (parent.width - 84px) * 0.78;
+        y: parent.height / 2 - 7px;
+        width: 1px;
+        height: 14px;
+        background: #D9DEE3;
+        opacity: 0.48;
+    }
+    Text {
+        x: 88px;
+        y: compact ? 9px : 12px;
+        text: wire.current-label + " A";
+        color: AppData.stale ? #6F7780 : wire.alert ? #FF6A82 : #FFB15C;
+        font-family: "Noto Sans Mono";
+        font-size: compact ? 14px : 17px;
+        font-weight: 700;
+    }
+    Text {
+        x: compact ? 202px : 230px;
+        y: compact ? 11px : 15px;
+        text: wire.voltage-label + " V";
+        color: AppData.stale ? #6F7780 : #7CCBFF;
+        font-family: "Noto Sans Mono";
+        font-size: 11px;
+    }
+    Text {
+        x: compact ? 306px : 344px;
+        y: compact ? 11px : 15px;
+        text: wire.power-label + " W";
+        color: AppData.stale ? #6F7780 : #D9DEE3;
+        font-family: "Noto Sans Mono";
+        font-size: 11px;
+    }
+    Text {
+        x: parent.width - 92px;
+        y: compact ? 11px : 15px;
+        width: 78px;
+        text: wire.deviation-label + "%";
+        color: wire.alert ? #FF6A82 : #6F7780;
+        font-family: "Noto Sans Mono";
+        font-size: 10px;
+        horizontal-alignment: right;
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: #202429;
+    }
+}

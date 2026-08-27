@@ -1,0 +1,8 @@
+{
+  "connected": true,
+  "stale": false,
+  "faulted": true,
+  "connection-label": "FAULT",
+  "sample-age": "LIVE  0.2 S",
+  "active-fault-count": "2"
+}

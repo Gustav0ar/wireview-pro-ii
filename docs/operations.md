@@ -2,7 +2,8 @@
 
 ## Service management
 
-Packages install both the daemon and CLI. Enable socket activation once:
+Packages install the desktop app, daemon, and CLI. Enable socket activation
+once:
 
 ```bash
 sudo systemctl enable --now wireviewd.socket
@@ -24,7 +25,8 @@ sudo systemd-sysusers /usr/lib/sysusers.d/wireview.conf
 sudo usermod --append --groups wireview-client "$USER"
 ```
 
-The socket starts `wireviewd.service` on the first CLI request. Useful checks:
+The socket starts `wireviewd.service` on the first desktop or CLI request.
+Useful checks:
 
 ```bash
 wireview status

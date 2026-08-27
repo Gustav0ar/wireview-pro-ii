@@ -1,0 +1,297 @@
+export struct BenchPin {
+    id: string,
+    voltage: string,
+    current: string,
+    power: string,
+    delta: string,
+    load: float,
+    alert: bool,
+}
+
+component ConsoleTab inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+
+    width: 132px;
+    background: transparent;
+
+    Text {
+        text: label;
+        color: active ? #ECEFF1 : #707780;
+        font-family: "Noto Sans";
+        font-size: 11px;
+        font-weight: active ? 700 : 500;
+        letter-spacing: 0.7px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        y: parent.height - 2px;
+        width: parent.width;
+        height: 2px;
+        background: active ? #6CB6FF : transparent;
+    }
+}
+
+component LedgerHeader inherits Rectangle {
+    height: 34px;
+    background: #050607;
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        alignment: center;
+        spacing: 8px;
+        Text { width: 70px; text: "WIRE"; color: #6F7680; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { width: 126px; text: "VOLTAGE"; color: #6F7680; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { width: 126px; text: "CURRENT"; color: #6F7680; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { width: 126px; text: "POWER"; color: #6F7680; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { width: 90px; text: "DELTA"; color: #6F7680; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { horizontal-stretch: 1; text: "PER-WIRE LIMIT  10.5 A"; color: #6F7680; font-family: "Noto Sans Mono"; font-size: 9px; horizontal-alignment: right; }
+    }
+}
+
+component LedgerRow inherits Rectangle {
+    in property <BenchPin> pin;
+
+    height: 72px;
+    background: pin.alert ? #100306 : transparent;
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        alignment: center;
+        spacing: 8px;
+
+        Text { width: 70px; text: pin.id; color: pin.alert ? #FF5C68 : #ECEFF1; font-family: "Noto Sans Mono"; font-size: 15px; font-weight: 700; }
+        Text { width: 126px; text: pin.voltage + " V"; color: #C9CED2; font-family: "Noto Sans Mono"; font-size: 15px; }
+        Text { width: 126px; text: pin.current + " A"; color: pin.alert ? #FF7C85 : #6CB6FF; font-family: "Noto Sans Mono"; font-size: 15px; font-weight: 700; }
+        Text { width: 126px; text: pin.power + " W"; color: #ECEFF1; font-family: "Noto Sans Mono"; font-size: 15px; }
+        Text { width: 90px; text: pin.delta; color: pin.alert ? #FF7C85 : #8C949E; font-family: "Noto Sans Mono"; font-size: 12px; }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 17px;
+            background: transparent;
+
+            Rectangle {
+                y: 7px;
+                width: parent.width;
+                height: 3px;
+                background: #25292E;
+            }
+
+            Rectangle {
+                y: 7px;
+                width: parent.width * pin.load;
+                height: 3px;
+                background: pin.alert ? #FF5C68 : #6CB6FF;
+            }
+
+            Rectangle {
+                x: parent.width * 0.84;
+                y: 1px;
+                width: 1px;
+                height: 15px;
+                background: #ECEFF1;
+                opacity: 0.65;
+            }
+        }
+    }
+
+    Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #24282D; }
+}
+
+component SmallReading inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <color> accent: #ECEFF1;
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 6px;
+        Text { text: label; color: #707780; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { text: value; color: accent; font-family: "Noto Sans Mono"; font-size: 19px; font-weight: 700; }
+    }
+}
+
+export component BenchConsole inherits Window {
+    title: "WireView Pro II - Bench console";
+    width: 1440px;
+    height: 900px;
+    background: #000000;
+
+    in property <bool> connected: true;
+    in property <bool> stale: false;
+    in property <bool> faulted: true;
+    in property <string> connection-label: "FAULT";
+    in property <string> sample-age: "LIVE  0.2 S";
+    in property <string> active-fault-count: "2";
+
+    private property <[BenchPin]> pins: [
+        { id: "P1", voltage: "12.03", current: "8.42", power: "101.3", delta: "+0.1%", load: 0.67, alert: false },
+        { id: "P2", voltage: "12.02", current: "8.55", power: "102.8", delta: "+1.5%", load: 0.68, alert: false },
+        { id: "P3", voltage: faulted ? "11.98" : "12.02", current: faulted ? "13.60" : "9.60", power: faulted ? "162.9" : "115.4", delta: faulted ? "+40%" : "+8.5%", load: faulted ? 1.0 : 0.76, alert: faulted },
+        { id: "P4", voltage: "12.01", current: "7.40", power: "88.9", delta: "-24%", load: 0.59, alert: false },
+        { id: "P5", voltage: "12.04", current: "7.31", power: "88.0", delta: "-25%", load: 0.58, alert: false },
+        { id: "P6", voltage: "12.03", current: "7.32", power: "88.1", delta: "-25%", load: 0.58, alert: false },
+    ];
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 54px;
+        background: #050607;
+
+        HorizontalLayout {
+            x: 22px;
+            y: 0;
+            width: parent.width - 44px;
+            height: parent.height;
+            alignment: center;
+            spacing: 15px;
+
+            Text { text: "WV"; color: #ECEFF1; font-family: "Noto Sans Mono"; font-size: 17px; font-weight: 700; }
+            Rectangle { width: 1px; height: 22px; background: #30343A; }
+            Text { text: "WIREVIEW PRO II"; color: #ECEFF1; font-family: "Noto Sans"; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; }
+            Text { text: "LINUX DESKTOP"; color: #707780; font-family: "Noto Sans Mono"; font-size: 9px; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Text { text: "API 2"; color: #707780; font-family: "Noto Sans Mono"; font-size: 10px; }
+            Text { text: "SESSION 84"; color: #707780; font-family: "Noto Sans Mono"; font-size: 10px; }
+            Text { text: sample-age; color: stale ? #8C949E : #6CB6FF; font-family: "Noto Sans Mono"; font-size: 10px; }
+            Rectangle { width: 8px; height: 8px; background: stale ? #646B72 : faulted ? #FF5C68 : #6CB6FF; }
+            Text { text: connection-label; color: stale ? #8C949E : faulted ? #FF7C85 : #ECEFF1; font-family: "Noto Sans Mono"; font-size: 10px; font-weight: 700; }
+        }
+
+        Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #30343A; }
+    }
+
+    Rectangle {
+        x: 0;
+        y: 54px;
+        width: parent.width;
+        height: 48px;
+        background: #000000;
+
+        HorizontalLayout {
+            x: 18px;
+            width: 912px;
+            height: parent.height;
+            spacing: 0px;
+            ConsoleTab { label: "OVERVIEW"; }
+            ConsoleTab { label: "PINS"; active: true; }
+            ConsoleTab { label: "FAULTS  " + active-fault-count; }
+            ConsoleTab { label: "HISTORY"; }
+            ConsoleTab { label: "CONFIGURE"; }
+            ConsoleTab { label: "THEME"; }
+            ConsoleTab { label: "DEVICE"; }
+        }
+
+        Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #24282D; }
+    }
+
+    Rectangle {
+        x: 22px;
+        y: 126px;
+        width: 1010px;
+        height: 548px;
+        background: transparent;
+        border-width: 1px;
+        border-color: #30343A;
+
+        HorizontalLayout {
+            x: 18px;
+            y: 0;
+            width: parent.width - 36px;
+            height: 52px;
+            alignment: center;
+            Text { text: "CONDUCTOR LEDGER"; color: #ECEFF1; font-family: "Noto Sans"; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Text { text: "MEAN CURRENT  8.77 A"; color: #8C949E; font-family: "Noto Sans Mono"; font-size: 10px; }
+            Text { text: faulted ? "IMBALANCE  40%" : "IMBALANCE  8.5%"; color: faulted ? #FF7C85 : #8C949E; font-family: "Noto Sans Mono"; font-size: 10px; font-weight: 700; }
+        }
+
+        Rectangle { x: 0; y: 51px; width: parent.width; height: 1px; background: #30343A; }
+
+        VerticalLayout {
+            x: 0;
+            y: 52px;
+            width: parent.width;
+            height: parent.height - 52px;
+            spacing: 0px;
+            LedgerHeader { }
+            for pin in pins: LedgerRow { pin: pin; }
+        }
+    }
+
+    Rectangle {
+        x: 1056px;
+        y: 126px;
+        width: 362px;
+        height: 548px;
+        background: transparent;
+        border-width: 1px;
+        border-color: #30343A;
+
+        Text { x: 20px; y: 18px; text: "SYSTEM TOTAL"; color: #707780; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { x: 18px; y: 49px; text: faulted ? "632.4" : "584.9"; color: stale ? #707780 : #ECEFF1; font-family: "Noto Sans Mono"; font-size: 54px; font-weight: 700; }
+        Text { x: 286px; y: 83px; text: "W"; color: #6CB6FF; font-family: "Noto Sans Mono"; font-size: 15px; font-weight: 700; }
+        Text { x: 20px; y: 119px; text: faulted ? "632.4 / 660.0 W" : "584.9 / 660.0 W"; color: faulted ? #FF7C85 : #8C949E; font-family: "Noto Sans Mono"; font-size: 10px; }
+
+        Rectangle { x: 20px; y: 148px; width: parent.width - 40px; height: 4px; background: #25292E;
+            Rectangle { width: parent.width * (faulted ? 0.958 : 0.886); height: parent.height; background: faulted ? #FF5C68 : #6CB6FF; }
+        }
+
+        GridLayout {
+            x: 20px;
+            y: 190px;
+            width: parent.width - 40px;
+            height: 142px;
+            spacing: 18px;
+            SmallReading { row: 0; col: 0; label: "VOLTAGE"; value: "12.02 V"; }
+            SmallReading { row: 0; col: 1; label: "CURRENT"; value: faulted ? "52.60 A" : "48.60 A"; accent: #6CB6FF; }
+            SmallReading { row: 1; col: 0; label: "INPUT"; value: faulted ? "92.4 C" : "48.2 C"; accent: faulted ? #FF7C85 : #ECEFF1; }
+            SmallReading { row: 1; col: 1; label: "OUTPUT"; value: "47.8 C"; }
+        }
+
+        Rectangle { x: 20px; y: 355px; width: parent.width - 40px; height: 1px; background: #30343A; }
+
+        Text { x: 20px; y: 382px; text: faulted ? "ACTIVE FAULT / 01" : "FAULT REGISTERS"; color: faulted ? #FF7C85 : #707780; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { x: 20px; y: 410px; width: parent.width - 40px; text: faulted ? "P3 wire current is above its configured limit." : "No active fault is asserted."; color: #ECEFF1; font-family: "Noto Sans"; font-size: 14px; font-weight: 700; wrap: word-wrap; }
+        Text { x: 20px; y: 462px; width: parent.width - 40px; text: faulted ? "Reduce the load and inspect the connector before clearing it." : "One recorded imbalance remains available for review."; color: #8C949E; font-family: "Noto Sans"; font-size: 11px; wrap: word-wrap; }
+        Text { x: 20px; y: 518px; text: faulted ? "OPEN FAULTS  >" : "VIEW HISTORY  >"; color: faulted ? #FF7C85 : #6CB6FF; font-family: "Noto Sans Mono"; font-size: 10px; font-weight: 700; }
+    }
+
+    Rectangle {
+        x: 22px;
+        y: 698px;
+        width: 1396px;
+        height: 172px;
+        background: #030404;
+        border-width: 1px;
+        border-color: #30343A;
+        clip: true;
+
+        Text { x: 18px; y: 14px; text: "CURRENT TRACE / 120 S"; color: #707780; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { x: parent.width - 150px; y: 14px; width: 130px; text: (faulted ? "52.60 A" : "48.60 A") + (stale ? "  FROZEN" : "  LIVE"); color: stale ? #707780 : #6CB6FF; font-family: "Noto Sans Mono"; font-size: 10px; horizontal-alignment: right; }
+
+        Rectangle { x: 18px; y: 68px; width: parent.width - 36px; height: 1px; background: #16191C; }
+        Rectangle { x: 18px; y: 112px; width: parent.width - 36px; height: 1px; background: #16191C; }
+
+        Path {
+            x: 18px; y: 49px; width: parent.width - 36px; height: 92px;
+            viewbox-width: 100; viewbox-height: 100;
+            commands: "M 0 69 L 4 67 L 8 68 L 12 61 L 16 65 L 20 58 L 24 62 L 28 55 L 32 57 L 36 46 L 40 51 L 44 44 L 48 48 L 52 39 L 56 42 L 60 34 L 64 38 L 68 29 L 72 36 L 76 26 L 80 32 L 84 23 L 88 30 L 92 19 L 96 24 L 100 17";
+            stroke: stale ? #555B60 : faulted ? #FF5C68 : #6CB6FF;
+            stroke-width: 1.4px;
+            fill: transparent;
+            fit: fill;
+        }
+
+        Text { x: 18px; y: 148px; text: "-120 S"; color: #555B60; font-family: "Noto Sans Mono"; font-size: 8px; }
+        Text { x: parent.width - 46px; y: 148px; text: "NOW"; color: #555B60; font-family: "Noto Sans Mono"; font-size: 8px; }
+    }
+}

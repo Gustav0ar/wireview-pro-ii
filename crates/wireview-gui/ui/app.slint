@@ -1,0 +1,942 @@
+import { AboutSlint, ScrollView } from "std-widgets.slint";
+export { AppData } from "types.slint";
+import { AppData, FaultView, ThemeSlotView } from "types.slint";
+import {
+    ActionButton, ConductorLane, CycleField, FocusTouchArea, NavItem, RailMetric,
+    SectionLabel, TextField
+} from "components.slint";
+
+component PageTitle inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+
+    height: 66px;
+    background: #000000;
+    Text {
+        x: 24px;
+        y: 13px;
+        width: parent.width - 48px;
+        height: 22px;
+        text: root.title;
+        color: #D9DEE3;
+        font-family: "Orbitron";
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        vertical-alignment: center;
+    }
+    Text {
+        x: 24px;
+        y: 38px;
+        width: parent.width - 48px;
+        height: 16px;
+        text: root.detail;
+        color: #737B83;
+        font-family: "Noto Sans";
+        font-size: 10px;
+        overflow: elide;
+    }
+    Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #272C31; }
+}
+
+component DiagnosticMetric inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> unit;
+    in property <bool> alert: false;
+
+    background: transparent;
+    SectionLabel { x: 0px; y: 5px; width: parent.width; height: 14px; text: root.label; }
+    Text {
+        x: 0px; y: 24px; width: parent.width; height: 24px;
+        text: root.value + (root.unit == "" ? "" : "  " + root.unit);
+        color: root.alert ? #FF6A82 : #D9DEE3;
+        font-family: "Noto Sans Mono"; font-size: 12px; font-weight: 700;
+        overflow: elide;
+    }
+}
+
+component LeftRail inherits Rectangle {
+    width: 220px;
+    background: #070809;
+
+    SectionLabel { x: 18px; y: 20px; width: parent.width - 36px; height: 14px; text: "TOTAL POWER"; }
+    Text {
+        x: 16px;
+        y: 43px;
+        width: parent.width - 32px;
+        height: 54px;
+        text: AppData.total-power-label + " W";
+        color: AppData.stale ? #6F7780 : AppData.active-fault-count > 0 ? #FF6A82 : #D9DEE3;
+        font-family: "Orbitron";
+        font-size: 31px;
+        font-weight: 700;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Text {
+        x: 18px;
+        y: 103px;
+        width: parent.width - 36px;
+        height: 14px;
+        text: "CABLE  " + AppData.cable-capability-label + " W";
+        color: #737B83;
+        font-family: "Noto Sans Mono";
+        font-size: 9px;
+    }
+    Rectangle {
+        x: 18px;
+        y: 126px;
+        width: parent.width - 36px;
+        height: 3px;
+        background: #272C31;
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * min(1, AppData.total-power / max(1, AppData.cable-capability));
+            height: parent.height;
+            background: AppData.active-fault-count > 0 ? #FF3B5C : #FFB15C;
+        }
+    }
+
+    VerticalLayout {
+        x: 18px;
+        y: 158px;
+        width: parent.width - 36px;
+        spacing: 4px;
+        RailMetric { label: "VOLTAGE"; value: AppData.average-voltage-label + " V"; accent: #7CCBFF; }
+        RailMetric { label: "CURRENT"; value: AppData.total-current-label + " A"; accent: #FFB15C; }
+        RailMetric { label: "INPUT TEMP"; value: AppData.input-temperature-label + " C"; accent: AppData.input-temperature >= AppData.active-fault-temperature ? #FF6A82 : #D9DEE3; }
+        RailMetric { label: "OUTPUT TEMP"; value: AppData.output-temperature-label + " C"; accent: AppData.output-temperature >= AppData.active-fault-temperature ? #FF6A82 : #D9DEE3; }
+        RailMetric { label: "FAN"; value: AppData.fan-duty-label + "%"; }
+    }
+
+    Rectangle { x: 18px; y: min(474px, parent.height - 288px); width: parent.width - 36px; height: 1px; background: #272C31; }
+
+    VerticalLayout {
+        x: 3px;
+        y: min(490px, parent.height - 272px);
+        width: parent.width - 6px;
+        spacing: 0px;
+        NavItem { label: "OVERVIEW"; index: 0; activated => { AppData.show-overview(); } }
+        NavItem { label: "PINS"; index: 1; suffix: "06"; }
+        NavItem { label: "GRAPHS"; index: 7; activated => { AppData.show-graphs(); } }
+        NavItem { label: "FAULTS"; index: 2; suffix: AppData.active-fault-count > 0 ? AppData.active-fault-count : ""; }
+        NavItem { label: "HISTORY"; index: 3; }
+        NavItem { label: "CONFIGURE"; index: 4; }
+        NavItem { label: "THEMES"; index: 5; }
+        NavItem { label: "DEVICE"; index: 6; }
+    }
+
+    Rectangle { x: parent.width - 1px; width: 1px; height: parent.height; background: #272C31; }
+}
+
+component PowerGraph inherits Rectangle {
+    background: #030405;
+    border-width: 1px;
+    border-color: #272C31;
+
+    SectionLabel { x: 14px; y: 11px; width: parent.width - 28px; height: 14px; text: "POWER / RECENT SAMPLES"; }
+    Text {
+        x: parent.width - 160px;
+        y: 10px;
+        width: 146px;
+        height: 16px;
+        text: AppData.total-power-label + " W";
+        color: #D9DEE3;
+        font-family: "Noto Sans Mono";
+        font-size: 10px;
+        font-weight: 700;
+        horizontal-alignment: right;
+    }
+    plot := Rectangle {
+        x: 14px;
+        y: 42px;
+        width: parent.width - 28px;
+        height: parent.height - 72px;
+        background: #000000;
+        clip: true;
+        Rectangle { y: parent.height * 0.25; width: parent.width; height: 1px; background: #171B1F; }
+        Rectangle { y: parent.height * 0.5; width: parent.width; height: 1px; background: #202429; }
+        Rectangle { y: parent.height * 0.75; width: parent.width; height: 1px; background: #171B1F; }
+        if AppData.overview-power-path != "" : Path {
+            width: parent.width;
+            height: parent.height;
+            viewbox-width: 1000;
+            viewbox-height: 1000;
+            fit: fill;
+            clip: true;
+            anti-alias: false;
+            commands: AppData.overview-power-path;
+            fill: transparent;
+            stroke: AppData.stale ? #4D555C : #FFB15C;
+            stroke-width: 2px;
+        }
+        if AppData.overview-power-sample-count < 2 : Text {
+            text: "WAITING FOR LIVE SAMPLES";
+            color: #4D555C;
+            font-family: "Noto Sans Mono";
+            font-size: 9px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    Text {
+        x: 14px; y: parent.height - 23px; width: parent.width - 28px; height: 14px;
+        text: AppData.overview-power-range;
+        color: #5D656D; font-family: "Noto Sans Mono"; font-size: 8px;
+    }
+}
+
+component OverviewPage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: "POWER FIELD"; detail: "Live load, recent samples, and all six conductors"; }
+    PowerGraph { x: 24px; y: 88px; width: parent.width - 48px; height: 190px; }
+    SectionLabel { x: 24px; y: 300px; width: parent.width - 48px; height: 16px; text: "SIX CONDUCTORS"; }
+    VerticalLayout {
+        x: 24px;
+        y: 324px;
+        width: parent.width - 48px;
+        height: parent.height - 344px;
+        spacing: 0px;
+        for pin in AppData.pins : ConductorLane { wire: pin; compact: true; }
+    }
+}
+
+component GraphControlButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    width: 92px;
+    height: 30px;
+    background: active ? #120B04 : area.has-hover ? #0C0F11 : #000000;
+    border-width: 1px;
+    border-color: area.has-focus ? #7CCBFF : active ? #FFB15C : #343A40;
+    opacity: enabled ? 1 : 0.35;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+    forward-focus: area;
+
+    Text {
+        x: 8px; width: parent.width - 16px; height: parent.height;
+        text: root.text;
+        color: root.active ? #FFB15C : #A5ADB4;
+        font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700;
+        horizontal-alignment: center; vertical-alignment: center; overflow: elide;
+    }
+    area := FocusTouchArea {
+        width: parent.width; height: parent.height; enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component GraphSeriesToggle inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <color> accent;
+    in property <bool> active;
+    callback clicked;
+
+    width: 112px;
+    height: 36px;
+    background: area.has-hover ? #0A0C0E : transparent;
+    border-width: 1px;
+    border-color: area.has-focus ? #7CCBFF : transparent;
+    accessible-role: checkbox;
+    accessible-label: label + " " + value;
+    accessible-checked: active;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: area;
+
+    Rectangle {
+        x: 4px; y: 11px; width: 10px; height: 10px;
+        background: root.active ? root.accent : transparent;
+        border-width: 1px; border-color: root.active ? root.accent : #4D555C;
+    }
+    Text {
+        x: 22px; y: 3px; width: parent.width - 26px; height: 15px;
+        text: root.label; color: root.active ? #D9DEE3 : #737B83;
+        font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700;
+    }
+    Text {
+        x: 22px; y: 18px; width: parent.width - 26px; height: 14px;
+        text: root.value; color: root.active ? root.accent : #4D555C;
+        font-family: "Noto Sans Mono"; font-size: 8px; overflow: elide;
+    }
+    area := FocusTouchArea { width: parent.width; height: parent.height; clicked => { root.clicked(); } }
+}
+
+component GraphPath inherits Path {
+    in property <string> path-data;
+    in property <color> line-color;
+    width: 100%;
+    height: 100%;
+    viewbox-width: 1000;
+    viewbox-height: 1000;
+    fit: fill;
+    clip: true;
+    anti-alias: false;
+    commands: path-data;
+    fill: transparent;
+    stroke: line-color;
+    stroke-width: 2px;
+}
+
+component GraphsPage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: AppData.graph-title; detail: "One unit, one scale, and a fixed ten-minute sample buffer"; }
+
+    HorizontalLayout {
+        x: 24px; y: 78px; width: parent.width - 48px; height: 30px; spacing: 6px;
+        GraphControlButton { text: "POWER"; active: AppData.graph-kind == "power"; clicked => { AppData.select-graph-kind("power"); } }
+        GraphControlButton { text: "CURRENT"; active: AppData.graph-kind == "current"; clicked => { AppData.select-graph-kind("current"); } }
+        GraphControlButton { text: "VOLTAGE"; active: AppData.graph-kind == "voltage"; clicked => { AppData.select-graph-kind("voltage"); } }
+        GraphControlButton { text: "TEMPERATURE"; active: AppData.graph-kind == "temperature"; clicked => { AppData.select-graph-kind("temperature"); } }
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+        GraphControlButton { width: 52px; text: "60 S"; active: AppData.graph-window-seconds == 60; clicked => { AppData.set-graph-window(60); } }
+        GraphControlButton { width: 52px; text: "5 M"; active: AppData.graph-window-seconds == 300; clicked => { AppData.set-graph-window(300); } }
+        GraphControlButton { width: 52px; text: "10 M"; active: AppData.graph-window-seconds == 600; clicked => { AppData.set-graph-window(600); } }
+        GraphControlButton { width: 68px; text: AppData.graph-paused ? "RESUME" : "PAUSE"; active: AppData.graph-paused; clicked => { AppData.toggle-graph-paused(); } }
+        GraphControlButton { width: 58px; text: "CLEAR"; clicked => { AppData.clear-graph(); } }
+    }
+
+    chart := Rectangle {
+        x: 24px; y: 124px; width: parent.width - 48px; height: parent.height - 148px;
+        background: #020304; border-width: 1px; border-color: #272C31;
+
+        SectionLabel { x: 16px; y: 12px; width: 260px; height: 14px; text: AppData.graph-range-label; }
+        Text {
+            x: parent.width - 300px; y: 9px; width: 284px; height: 19px;
+            text: AppData.graph-summary-name + "  " + AppData.graph-summary-value;
+            color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; font-weight: 700;
+            horizontal-alignment: right; overflow: elide;
+        }
+        Rectangle { x: 16px; y: 36px; width: parent.width - 32px; height: 1px; background: #202429; }
+
+        HorizontalLayout {
+            x: 12px; y: 43px; width: parent.width - 24px; height: 36px; spacing: 4px;
+            if AppData.graph-series-count > 0 : GraphSeriesToggle { label: AppData.graph-series-1-label; value: AppData.graph-series-1-value; accent: #43C77A; active: AppData.graph-series-1-visible; clicked => { AppData.toggle-graph-series(0); } }
+            if AppData.graph-series-count > 1 : GraphSeriesToggle { label: AppData.graph-series-2-label; value: AppData.graph-series-2-value; accent: #7657D6; active: AppData.graph-series-2-visible; clicked => { AppData.toggle-graph-series(1); } }
+            if AppData.graph-series-count > 2 : GraphSeriesToggle { label: AppData.graph-series-3-label; value: AppData.graph-series-3-value; accent: #E4544F; active: AppData.graph-series-3-visible; clicked => { AppData.toggle-graph-series(2); } }
+            if AppData.graph-series-count > 3 : GraphSeriesToggle { label: AppData.graph-series-4-label; value: AppData.graph-series-4-value; accent: #B24CCA; active: AppData.graph-series-4-visible; clicked => { AppData.toggle-graph-series(3); } }
+            if AppData.graph-series-count > 4 : GraphSeriesToggle { label: AppData.graph-series-5-label; value: AppData.graph-series-5-value; accent: #42C93F; active: AppData.graph-series-5-visible; clicked => { AppData.toggle-graph-series(4); } }
+            if AppData.graph-series-count > 5 : GraphSeriesToggle { label: AppData.graph-series-6-label; value: AppData.graph-series-6-value; accent: #D84816; active: AppData.graph-series-6-visible; clicked => { AppData.toggle-graph-series(5); } }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+        }
+
+        plot := Rectangle {
+            x: 62px; y: 92px; width: parent.width - 82px; height: parent.height - 142px;
+            background: #000000; clip: true;
+            Rectangle { y: 0px; width: parent.width; height: 1px; background: #343A40; }
+            Rectangle { y: parent.height * 0.25; width: parent.width; height: 1px; background: #202429; }
+            Rectangle { y: parent.height * 0.5; width: parent.width; height: 1px; background: #343A40; }
+            Rectangle { y: parent.height * 0.75; width: parent.width; height: 1px; background: #202429; }
+            Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #343A40; }
+            Rectangle { x: parent.width * 0.25; width: 1px; height: parent.height; background: #171B1F; }
+            Rectangle { x: parent.width * 0.5; width: 1px; height: parent.height; background: #202429; }
+            Rectangle { x: parent.width * 0.75; width: 1px; height: parent.height; background: #171B1F; }
+            if AppData.graph-series-1-visible && AppData.graph-path-1 != "" : GraphPath { path-data: AppData.graph-path-1; line-color: #43C77A; }
+            if AppData.graph-series-2-visible && AppData.graph-path-2 != "" : GraphPath { path-data: AppData.graph-path-2; line-color: #7657D6; }
+            if AppData.graph-series-3-visible && AppData.graph-path-3 != "" : GraphPath { path-data: AppData.graph-path-3; line-color: #E4544F; }
+            if AppData.graph-series-4-visible && AppData.graph-path-4 != "" : GraphPath { path-data: AppData.graph-path-4; line-color: #B24CCA; }
+            if AppData.graph-series-5-visible && AppData.graph-path-5 != "" : GraphPath { path-data: AppData.graph-path-5; line-color: #42C93F; }
+            if AppData.graph-series-6-visible && AppData.graph-path-6 != "" : GraphPath { path-data: AppData.graph-path-6; line-color: #D84816; }
+            if AppData.graph-sample-count < 2 : Text {
+                text: AppData.graph-paused ? "GRAPH PAUSED" : "WAITING FOR THE NEXT LIVE SAMPLE";
+                color: #4D555C; font-family: "Noto Sans Mono"; font-size: 10px;
+                horizontal-alignment: center; vertical-alignment: center;
+            }
+        }
+
+        Text { x: 8px; y: 84px; width: 46px; height: 16px; text: AppData.graph-y-max-label; color: #737B83; font-family: "Noto Sans Mono"; font-size: 8px; horizontal-alignment: right; }
+        Text { x: 8px; y: 84px + (parent.height - 142px) / 2 - 8px; width: 46px; height: 16px; text: AppData.graph-y-mid-label; color: #737B83; font-family: "Noto Sans Mono"; font-size: 8px; horizontal-alignment: right; }
+        Text { x: 8px; y: parent.height - 58px; width: 46px; height: 16px; text: AppData.graph-y-min-label; color: #737B83; font-family: "Noto Sans Mono"; font-size: 8px; horizontal-alignment: right; }
+        Text { x: 62px; y: parent.height - 39px; width: 70px; height: 14px; text: AppData.graph-window-axis-label; color: #5D656D; font-family: "Noto Sans Mono"; font-size: 8px; }
+        Text { x: parent.width - 72px; y: parent.height - 39px; width: 52px; height: 14px; text: "NOW"; color: #5D656D; font-family: "Noto Sans Mono"; font-size: 8px; horizontal-alignment: right; }
+        Text { x: 62px; y: parent.height - 21px; width: parent.width - 124px; height: 14px; text: "BUFFER  " + AppData.graph-buffer-label + "    NEW TELEMETRY ONLY"; color: #4D555C; font-family: "Noto Sans Mono"; font-size: 8px; }
+        Text { x: parent.width - 178px; y: parent.height - 21px; width: 158px; height: 14px; text: AppData.graph-paused ? "PAUSED" : "LIVE"; color: AppData.graph-paused ? #FFB15C : #7CCBFF; font-family: "Noto Sans Mono"; font-size: 8px; font-weight: 700; horizontal-alignment: right; }
+    }
+}
+
+component PinsPage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: "CONDUCTORS"; detail: "Current distribution against the configured per-wire limit"; }
+    ScrollView {
+        x: 24px; y: 72px; width: parent.width - 48px; height: parent.height - 88px;
+        viewport-width: self.visible-width;
+        viewport-height: max(self.visible-height, 738px);
+        Rectangle {
+            width: parent.width;
+            height: 738px;
+            background: #000000;
+            HorizontalLayout {
+                x: 0px; y: 8px; width: parent.width - 12px; height: 18px;
+                Text { text: "MEAN  " + AppData.mean-current-label + " A"; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                Text { text: "LIMIT  " + AppData.active-fault-wire-current-label + " A"; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; }
+            }
+            VerticalLayout {
+                x: 0px; y: 32px; width: parent.width - 12px; height: 528px; spacing: 0px;
+                for pin in AppData.pins : ConductorLane { wire: pin; }
+            }
+            HorizontalLayout {
+                x: 0px; y: 574px; width: parent.width - 12px; height: 58px; spacing: 18px;
+                DiagnosticMetric { horizontal-stretch: 1; label: "CONTROLLER VDD"; value: AppData.controller-vdd-label; unit: "V"; }
+                DiagnosticMetric {
+                    horizontal-stretch: 1; label: "EXTERNAL 1"; value: AppData.external-1-temperature-label;
+                    unit: AppData.external-1-present ? "C" : "";
+                    alert: AppData.external-1-present && AppData.external-1-temperature >= AppData.active-fault-temperature;
+                }
+                DiagnosticMetric {
+                    horizontal-stretch: 1; label: "EXTERNAL 2"; value: AppData.external-2-temperature-label;
+                    unit: AppData.external-2-present ? "C" : "";
+                    alert: AppData.external-2-present && AppData.external-2-temperature >= AppData.active-fault-temperature;
+                }
+                DiagnosticMetric { horizontal-stretch: 1; label: "CABLE CAPABILITY"; value: AppData.cable-capability-label; unit: "W"; }
+            }
+            Rectangle { x: 0px; y: 646px; width: parent.width - 12px; height: 1px; background: #272C31; }
+            Rectangle {
+                x: 0px; y: 664px; width: parent.width - 12px; height: 58px;
+                background: transparent; border-width: 1px; border-color: #272C31;
+                SectionLabel { x: 12px; y: 8px; width: parent.width - 24px; height: 14px; text: "GEOMETRY READ"; }
+                Text {
+                    x: 12px; y: 29px; width: parent.width - 24px; height: 18px;
+                    text: AppData.geometry-read;
+                    color: AppData.active-fault-count > 0 ? #FF6A82 : #D9DEE3;
+                    font-family: "Noto Sans Mono"; font-size: 10px; overflow: elide;
+                }
+            }
+        }
+    }
+}
+
+component FaultRow inherits Rectangle {
+    in property <FaultView> fault;
+    height: 94px;
+    background: fault.active ? #100306 : transparent;
+
+    Rectangle { x: 0px; y: 0px; width: 3px; height: parent.height; background: fault.active ? #FF3B5C : fault.recorded ? #7CCBFF : #272C31; }
+    Text {
+        x: 16px; y: 12px; width: parent.width - 154px; height: 20px;
+        text: fault.label;
+        color: fault.active ? #FF6A82 : #D9DEE3;
+        font-family: "Noto Sans"; font-size: 13px; font-weight: 700;
+    }
+    Text {
+        x: 16px; y: 36px; width: parent.width - 154px; height: 18px;
+        text: fault.detail;
+        color: #737B83;
+        font-family: "Noto Sans Mono"; font-size: 9px; overflow: elide;
+    }
+    Text {
+        x: 16px; y: 61px; width: parent.width - 154px; height: 18px;
+        text: fault.active || fault.recorded ? fault.action : "";
+        color: fault.active ? #D9DEE3 : #6F7780;
+        font-family: "Noto Sans"; font-size: 9px; overflow: elide;
+    }
+    Text {
+        x: parent.width - 132px; y: 12px; width: 116px; height: 18px;
+        text: fault.active ? "ACTIVE" : fault.recorded ? "RECORDED" : "CLEAR";
+        color: fault.active ? #FF6A82 : fault.recorded ? #7CCBFF : #737B83;
+        font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; horizontal-alignment: right;
+    }
+    if fault.known && (fault.active || fault.recorded) : ActionButton {
+        x: parent.width - 112px; y: 48px; width: 96px; height: 28px;
+        text: "CLEAR"; danger: fault.active;
+        clicked => {
+            AppData.pending-fault-active-mask = fault.active ? fault.mask : 0;
+            AppData.pending-fault-logged-mask = fault.recorded ? fault.mask : 0;
+            AppData.confirm-kind = "clear-fault";
+            AppData.confirm-title = "Clear device fault";
+            AppData.confirm-message = "The device may assert the alarm again if the condition remains.";
+        }
+    }
+    Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #202429; }
+}
+
+component FaultsPage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: "PROTECTION"; detail: "Active, recorded, and unknown fault-register bits"; }
+    Rectangle {
+        x: 24px; y: 86px; width: parent.width - 48px; height: 54px;
+        background: AppData.active-fault-count > 0 ? #100306 : #030405;
+        border-width: 1px; border-color: AppData.active-fault-count > 0 ? #7D2032 : #272C31;
+        Text { x: 14px; width: 180px; text: AppData.active-fault-count + " ACTIVE"; color: AppData.active-fault-count > 0 ? #FF6A82 : #D9DEE3; font-family: "Orbitron"; font-size: 16px; font-weight: 700; vertical-alignment: center; }
+        Text { x: 206px; width: 180px; text: AppData.recorded-fault-count + " RECORDED"; color: #7CCBFF; font-family: "Noto Sans Mono"; font-size: 10px; vertical-alignment: center; }
+        Text { x: parent.width - 250px; width: 232px; text: "MASK 0x" + AppData.active-fault-hex; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; horizontal-alignment: right; vertical-alignment: center; }
+    }
+    ScrollView {
+        x: 24px; y: 158px; width: parent.width - 48px; height: parent.height - 232px;
+        viewport-width: self.visible-width;
+        viewport-height: max(self.visible-height, AppData.fault-row-count * 94px);
+        VerticalLayout {
+            width: parent.width;
+            spacing: 0px;
+            for fault in AppData.faults : FaultRow { fault: fault; }
+        }
+    }
+    Text {
+        x: 24px; y: parent.height - 54px; width: parent.width - 48px; height: 30px;
+        text: "UNKNOWN ACTIVE 0x" + AppData.unknown-active-hex + "    UNKNOWN RECORDED 0x" + AppData.unknown-logged-hex;
+        color: AppData.unknown-active-mask > 0 ? #FF6A82 : #737B83;
+        font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center;
+    }
+}
+
+component HistoryPage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: "DEVICE HISTORY"; detail: "Read the complete flash log, then export decoded or exact raw data"; }
+    HorizontalLayout {
+        x: 24px; y: 84px; width: parent.width - 48px; height: 36px; spacing: 8px;
+        ActionButton { text: AppData.history-loading ? "READING" : "LOAD HISTORY"; primary: true; enabled: !AppData.history-loading && AppData.device-ready; clicked => { AppData.load-history(); } }
+        ActionButton { text: "CANCEL"; enabled: AppData.history-loading; clicked => { AppData.cancel-history(); } }
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+        Text { text: AppData.history-entry-count + " ENTRIES"; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; vertical-alignment: center; }
+    }
+    Rectangle {
+        x: 24px; y: 132px; width: parent.width - 48px; height: 3px; background: #272C31;
+        Rectangle { x: 0px; y: 0px; width: parent.width * min(1, max(0, AppData.history-progress)); height: parent.height; background: #7CCBFF; }
+    }
+    Text { x: 24px; y: 145px; width: parent.width - 48px; height: 18px; text: AppData.history-status; color: #737B83; font-family: "Noto Sans"; font-size: 10px; overflow: elide; }
+
+    Rectangle {
+        x: 24px; y: 178px; width: parent.width - 48px; height: 30px; background: #070809;
+        Text { x: 10px; width: 120px; text: "DEVICE TIME"; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+        Text { x: 142px; width: 100px; text: "POWER"; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+        Text { x: 252px; width: 100px; text: "CURRENT"; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+        Text { x: 362px; width: 100px; text: "VOLTAGE"; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+        Text { x: 472px; width: 100px; text: "INPUT"; color: #737B83; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+    }
+    ScrollView {
+        x: 24px; y: 208px; width: parent.width - 48px; height: parent.height - 320px;
+        viewport-width: self.visible-width;
+        viewport-height: max(self.visible-height, AppData.history-row-count * 32px);
+        VerticalLayout {
+            width: parent.width; spacing: 0px;
+            for row in AppData.history-rows : Rectangle {
+                height: 32px; background: #000000;
+                Text { x: 10px; width: 120px; text: row.device-time; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+                Text { x: 142px; width: 100px; text: row.power; color: #FFB15C; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+                Text { x: 252px; width: 100px; text: row.current; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+                Text { x: 362px; width: 100px; text: row.voltage; color: #7CCBFF; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+                Text { x: 472px; width: 100px; text: row.input-temp; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+                Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #202429; }
+            }
+        }
+    }
+    HorizontalLayout {
+        x: 24px; y: parent.height - 88px; width: parent.width - 48px; height: 36px; spacing: 8px;
+        TextField { value <=> AppData.history-export-path; label: "History export path"; horizontal-stretch: 1; }
+        ActionButton { text: "CSV"; enabled: AppData.history-loaded; clicked => { AppData.export-history("csv", AppData.history-export-path); } }
+        ActionButton { text: "JSON"; enabled: AppData.history-loaded; clicked => { AppData.export-history("json", AppData.history-export-path); } }
+        ActionButton { text: "EXACT RAW"; enabled: AppData.history-loaded; clicked => { AppData.export-history("raw", AppData.history-export-path); } }
+    }
+}
+
+component ConfigInput inherits Rectangle {
+    in property <string> label;
+    in property <string> detail;
+    in-out property <string> value;
+    height: 64px;
+    background: transparent;
+    SectionLabel { x: 0px; y: 0px; width: parent.width; height: 14px; text: root.label; }
+    TextField {
+        x: 0px; y: 22px; width: parent.width; value <=> root.value; label: root.label;
+        edited(value) => { AppData.config-dirty = true; }
+    }
+}
+
+component ConfigCycle inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    callback cycle;
+    height: 64px;
+    background: transparent;
+    SectionLabel { x: 0px; y: 0px; width: parent.width; height: 14px; text: root.label; }
+    CycleField { x: 0px; y: 22px; width: parent.width; value: root.value; label: root.label; cycle => { root.cycle(); AppData.config-dirty = true; } }
+}
+
+component ConfigurePage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: "CONFIGURE"; detail: "Daemon-validated active settings and guarded permanent storage"; }
+    ScrollView {
+        x: 24px; y: 82px; width: parent.width - 48px; height: parent.height - 154px;
+        enabled: AppData.config-loaded && AppData.operation-state != "running";
+        viewport-width: self.visible-width;
+        viewport-height: 1149px;
+        body := VerticalLayout {
+            width: parent.width - 12px;
+            height: 1149px;
+            spacing: 18px;
+
+            SectionLabel { height: 18px; text: "FAN AND SAMPLING"; }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 2; label: "FRIENDLY NAME"; value <=> AppData.friendly-name; }
+                ConfigCycle { horizontal-stretch: 1; label: "FAN MODE"; value: AppData.fan-mode; cycle => { AppData.fan-mode = AppData.fan-mode == "curve" ? "fixed" : "curve"; } }
+                ConfigCycle { horizontal-stretch: 1; label: "TEMPERATURE SOURCE"; value: AppData.temperature-source; cycle => {
+                    AppData.temperature-source = AppData.temperature-source == "input" ? "output" : AppData.temperature-source == "output" ? "external1" : AppData.temperature-source == "external1" ? "external2" : AppData.temperature-source == "external2" ? "maximum" : "input";
+                } }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 1; label: "DUTY MIN %"; value <=> AppData.duty-min; }
+                ConfigInput { horizontal-stretch: 1; label: "DUTY MAX %"; value <=> AppData.duty-max; }
+                ConfigInput { horizontal-stretch: 1; label: "FAN TEMP MIN C"; value <=> AppData.fan-temp-min; }
+                ConfigInput { horizontal-stretch: 1; label: "FAN TEMP MAX C"; value <=> AppData.fan-temp-max; }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 1; label: "BACKLIGHT %"; value <=> AppData.backlight; }
+                ConfigCycle { horizontal-stretch: 1; label: "AVERAGING MS"; value: AppData.averaging; cycle => {
+                    AppData.averaging = AppData.averaging == "22" ? "44" : AppData.averaging == "44" ? "89" : AppData.averaging == "89" ? "177" : AppData.averaging == "177" ? "354" : AppData.averaging == "354" ? "709" : AppData.averaging == "709" ? "1417" : "22";
+                } }
+                ConfigInput { horizontal-stretch: 1; label: "LOGGING SECONDS"; value <=> AppData.logging-interval; }
+                ConfigInput { horizontal-stretch: 1; label: "SHUTDOWN WAIT"; value <=> AppData.shutdown-wait; }
+            }
+
+            Rectangle { height: 1px; background: #272C31; }
+            SectionLabel { height: 18px; text: "DISPLAY AND DAEMON"; }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigCycle { horizontal-stretch: 1; label: "DEFAULT SCREEN"; value: AppData.default-screen; cycle => {
+                    AppData.default-screen = AppData.default-screen == "main" ? "simple" : AppData.default-screen == "simple" ? "current" : AppData.default-screen == "current" ? "temperature" : AppData.default-screen == "temperature" ? "status" : "main";
+                } }
+                ConfigCycle { horizontal-stretch: 1; label: "CURRENT SCALE A"; value: AppData.current-scale; cycle => {
+                    AppData.current-scale = AppData.current-scale == "5" ? "10" : AppData.current-scale == "10" ? "15" : AppData.current-scale == "15" ? "20" : "5";
+                } }
+                ConfigCycle { horizontal-stretch: 1; label: "POWER SCALE"; value: AppData.power-scale; cycle => {
+                    AppData.power-scale = AppData.power-scale == "auto" ? "watts300" : AppData.power-scale == "watts300" ? "watts600" : "auto";
+                } }
+                ConfigInput { horizontal-stretch: 1; label: "POLL INTERVAL MS"; value <=> AppData.poll-interval; }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigCycle { horizontal-stretch: 1; label: "ROTATION"; value: AppData.rotation; cycle => { AppData.rotation = AppData.rotation == "0" ? "180" : "0"; } }
+                ConfigCycle { horizontal-stretch: 1; label: "TIMEOUT MODE"; value: AppData.timeout-mode; cycle => {
+                    AppData.timeout-mode = AppData.timeout-mode == "static" ? "cycle" : AppData.timeout-mode == "cycle" ? "sleep" : "static";
+                } }
+                ConfigInput { horizontal-stretch: 1; label: "CYCLE TIME SECONDS"; value <=> AppData.cycle-time; }
+                ConfigInput { horizontal-stretch: 1; label: "SLEEP TIMEOUT SECONDS"; value <=> AppData.display-timeout; }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 2; label: "CYCLE SCREENS, COMMA SEPARATED"; value <=> AppData.cycle-screens; }
+                ConfigCycle { horizontal-stretch: 1; label: "BACKGROUND PRESET"; value: AppData.background-mode; cycle => {
+                    AppData.background-mode = AppData.background-mode == "thermal_grizzly_orange" ? "thermal_grizzly_dark" : AppData.background-mode == "thermal_grizzly_dark" ? "disabled" : "thermal_grizzly_orange";
+                } }
+                ConfigCycle { horizontal-stretch: 1; label: "FAN THEME"; value: AppData.fan-theme; cycle => {
+                    AppData.fan-theme = AppData.fan-theme == "thermal_grizzly_orange" ? "thermal_grizzly_dark" : AppData.fan-theme == "thermal_grizzly_dark" ? "black_and_white" : "thermal_grizzly_orange";
+                } }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 1; label: "PRIMARY RGB / ARGB"; value <=> AppData.primary-color; }
+                ConfigInput { horizontal-stretch: 1; label: "SECONDARY RGB / ARGB"; value <=> AppData.secondary-color; }
+                ConfigInput { horizontal-stretch: 1; label: "HIGHLIGHT RGB / ARGB"; value <=> AppData.highlight-color; }
+                ConfigInput { horizontal-stretch: 1; label: "BACKGROUND RGB / ARGB"; value <=> AppData.background-color; }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigCycle { horizontal-stretch: 1; label: "INVERT DISPLAY"; value: AppData.inverted ? "true" : "false"; cycle => { AppData.inverted = !AppData.inverted; } }
+                Rectangle { horizontal-stretch: 3; background: transparent; }
+            }
+
+            Rectangle { height: 1px; background: #272C31; }
+            SectionLabel { height: 18px; text: "FAULT LIMITS"; }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 1; label: "TEMPERATURE C"; value <=> AppData.fault-temperature; }
+                ConfigInput { horizontal-stretch: 1; label: "TOTAL CURRENT A"; value <=> AppData.fault-total-current; }
+                ConfigInput { horizontal-stretch: 1; label: "WIRE CURRENT A"; value <=> AppData.fault-wire-current; }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 1; label: "TOTAL POWER W"; value <=> AppData.fault-total-power; }
+                ConfigInput { horizontal-stretch: 1; label: "IMBALANCE %"; value <=> AppData.fault-imbalance; }
+                ConfigInput { horizontal-stretch: 1; label: "IMBALANCE MIN LOAD A"; value <=> AppData.fault-min-load; }
+            }
+
+            Rectangle { height: 1px; background: #272C31; }
+            SectionLabel { height: 18px; text: "FAULT ACTIONS, COMMA SEPARATED OR NONE"; }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 1; label: "DISPLAY"; value <=> AppData.fault-actions-display; }
+                ConfigInput { horizontal-stretch: 1; label: "BUZZER"; value <=> AppData.fault-actions-buzzer; }
+            }
+            HorizontalLayout {
+                height: 64px; spacing: 14px;
+                ConfigInput { horizontal-stretch: 1; label: "SOFT POWER"; value <=> AppData.fault-actions-soft-power; }
+                ConfigInput { horizontal-stretch: 1; label: "HARD POWER"; value <=> AppData.fault-actions-hard-power; }
+            }
+        }
+    }
+    HorizontalLayout {
+        x: 24px; y: parent.height - 56px; width: parent.width - 48px; height: 34px; spacing: 8px;
+        Text { text: AppData.config-loaded ? AppData.config-dirty ? "UNSAVED EDITS" : "ACTIVE SETTINGS LOADED" : "CONFIGURATION UNAVAILABLE"; color: AppData.config-dirty ? #FFB15C : #737B83; font-family: "Noto Sans Mono"; font-size: 9px; vertical-alignment: center; }
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+        ActionButton { text: "RELOAD STORED"; enabled: AppData.config-loaded && AppData.operation-state != "running"; clicked => { AppData.reload-config(); } }
+        ActionButton { text: "APPLY UNTIL RELOAD"; enabled: AppData.config-loaded && AppData.config-dirty && AppData.operation-state != "running"; primary: true; clicked => { AppData.apply-config(); } }
+        ActionButton { text: "STORE PERMANENT"; enabled: AppData.config-loaded && AppData.config-dirty && AppData.operation-state != "running"; danger: true; clicked => {
+            AppData.confirm-kind = "store";
+            AppData.confirm-title = "Store configuration";
+            AppData.confirm-message = "This writes changed device settings to nonvolatile memory. Daemon polling remains runtime-only.";
+        } }
+    }
+}
+
+component ThemeSlotRow inherits Rectangle {
+    in property <ThemeSlotView> slot;
+    height: 54px;
+    background: AppData.selected-theme-slot == slot.id ? #0D1012 : area.has-hover ? #090B0D : transparent;
+    accessible-role: button;
+    accessible-label: slot.label;
+    accessible-action-default => { area.clicked(); }
+    forward-focus: area;
+    Text { x: 12px; y: 8px; width: parent.width - 24px; height: 18px; text: slot.label; color: AppData.selected-theme-slot == slot.id ? #D9DEE3 : #899198; font-family: "Noto Sans"; font-size: 11px; font-weight: 700; }
+    Text { x: 12px; y: 30px; width: parent.width - 24px; height: 14px; text: slot.geometry + "    " + slot.status; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 8px; overflow: elide; }
+    Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #202429; }
+    area := FocusTouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+        AppData.selected-theme-slot = slot.id;
+        AppData.theme-path = slot.id + ".rgb565";
+        AppData.theme-preview-available = false;
+        AppData.theme-status = "Read the selected slot before exporting its backup.";
+        }
+    }
+}
+
+component ThemesPage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: "THEME ASSETS"; detail: "Exact named RGB565 slots only. Arbitrary flash addresses are never accepted."; }
+    Rectangle {
+        x: 24px; y: 86px; width: 330px; height: parent.height - 110px;
+        background: #030405; border-width: 1px; border-color: #272C31;
+        VerticalLayout {
+            width: parent.width; spacing: 0px;
+            for slot in AppData.theme-slots : ThemeSlotRow { slot: slot; }
+        }
+    }
+    Rectangle {
+        x: 378px; y: 86px; width: parent.width - 402px; height: 260px;
+        background: #030405; border-width: 1px; border-color: #272C31;
+        if AppData.theme-preview-available : Image {
+            x: 14px; y: 14px; width: parent.width - 28px; height: parent.height - 28px;
+            source: AppData.theme-preview; image-fit: contain;
+        }
+        if !AppData.theme-preview-available : Text {
+            x: 20px; y: 20px; width: parent.width - 40px; height: parent.height - 40px;
+            text: "READ SELECTED SLOT TO PREVIEW";
+            color: #6F7780; font-family: "Noto Sans Mono"; font-size: 10px;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+    }
+    Text {
+        x: 378px; y: 362px; width: parent.width - 402px; height: 38px;
+        text: AppData.theme-status;
+        color: #899198; font-family: "Noto Sans"; font-size: 10px; wrap: word-wrap;
+    }
+    SectionLabel { x: 378px; y: 420px; width: parent.width - 402px; height: 14px; text: "RAW FILE PATH"; }
+    TextField { x: 378px; y: 444px; width: parent.width - 402px; value <=> AppData.theme-path; label: "Theme raw file path"; }
+    HorizontalLayout {
+        x: 378px; y: 500px; width: parent.width - 402px; height: 34px; spacing: 8px;
+        ActionButton { text: "READ PREVIEW"; primary: true; enabled: AppData.device-ready; clicked => { AppData.read-theme(AppData.selected-theme-slot); } }
+        ActionButton { text: "EXPORT BACKUP"; enabled: AppData.theme-preview-available; clicked => { AppData.export-theme(AppData.selected-theme-slot, AppData.theme-path); } }
+        ActionButton { text: "REPLACE SLOT"; danger: true; enabled: AppData.device-ready; clicked => {
+            AppData.confirm-kind = "write-theme";
+            AppData.confirm-title = "Replace theme slot";
+            AppData.confirm-message = "The daemon preserves affected sectors, verifies readback, and attempts rollback on ordinary failure.";
+        } }
+    }
+}
+
+component DevicePage inherits Rectangle {
+    background: #000000;
+    PageTitle { x: 0px; y: 0px; width: parent.width; title: "DEVICE"; detail: "Hardware identity, daemon session, recovery actions, and licenses"; }
+    Rectangle {
+        x: 24px; y: 86px; width: parent.width - 48px; height: 250px;
+        background: #030405; border-width: 1px; border-color: #272C31;
+        SectionLabel { x: 16px; y: 14px; width: parent.width - 32px; height: 14px; text: "HARDWARE IDENTITY"; }
+        Text { x: 16px; y: 46px; width: 260px; text: "PRODUCT"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; }
+        Text { x: 286px; y: 43px; width: parent.width - 302px; text: AppData.device-name; color: #D9DEE3; font-family: "Noto Sans"; font-size: 12px; }
+        Text { x: 16px; y: 79px; width: 260px; text: "UNIQUE ID"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; }
+        Text { x: 286px; y: 76px; width: parent.width - 302px; text: AppData.device-uid; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; overflow: elide; }
+        Text { x: 16px; y: 112px; width: 260px; text: "FIRMWARE / HARDWARE"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; }
+        Text { x: 286px; y: 109px; width: parent.width - 302px; text: AppData.firmware-version + " / " + AppData.hardware-revision; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; }
+        Text { x: 16px; y: 145px; width: 260px; text: "CONFIG VERSION"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; }
+        Text { x: 286px; y: 142px; width: parent.width - 302px; text: AppData.config-version; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; }
+        Text { x: 16px; y: 178px; width: 260px; text: "DEVICE BUILD"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; }
+        Text { x: 286px; y: 175px; width: parent.width - 302px; text: AppData.device-build; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; overflow: elide; }
+        Text { x: 16px; y: 211px; width: 260px; text: "CAPABILITIES"; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; }
+        Text { x: 286px; y: 208px; width: parent.width - 302px; text: AppData.device-capabilities; color: #899198; font-family: "Noto Sans Mono"; font-size: 9px; overflow: elide; }
+    }
+    Rectangle {
+        x: 24px; y: 360px; width: (parent.width - 64px) * 0.58; height: 210px;
+        background: #030405; border-width: 1px; border-color: #272C31;
+        SectionLabel { x: 16px; y: 14px; width: parent.width - 32px; height: 14px; text: "DAEMON SESSION"; }
+        Text { x: 16px; y: 48px; width: parent.width - 32px; text: AppData.daemon-version + " / " + AppData.daemon-build; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; overflow: elide; }
+        Text { x: 16px; y: 77px; width: parent.width - 32px; text: AppData.connected-port; color: #899198; font-family: "Noto Sans Mono"; font-size: 10px; overflow: elide; }
+        Text { x: 16px; y: 106px; width: parent.width - 32px; text: AppData.session-label + " / POLL " + AppData.poll-interval + " MS"; color: #899198; font-family: "Noto Sans Mono"; font-size: 10px; }
+        HorizontalLayout {
+            x: 16px; y: 154px; width: parent.width - 32px; height: 34px; spacing: 8px;
+            ActionButton { text: "REFRESH"; clicked => { AppData.refresh(); } }
+            ActionButton { text: "FACTORY RESET"; danger: true; enabled: AppData.device-ready; clicked => {
+                AppData.confirm-kind = "factory-reset"; AppData.confirm-title = "Factory reset"; AppData.confirm-message = "This permanently replaces stored configuration with firmware defaults.";
+            } }
+            ActionButton { text: "REBOOT DEVICE"; danger: true; enabled: AppData.device-ready; clicked => {
+                AppData.confirm-kind = "reboot"; AppData.confirm-title = "Reboot device"; AppData.confirm-message = "The device will disconnect and re-enumerate.";
+            } }
+        }
+    }
+    Rectangle {
+        x: 40px + (parent.width - 64px) * 0.58; y: 360px; width: (parent.width - 64px) * 0.42 - 16px; height: 210px;
+        background: #030405; border-width: 1px; border-color: #272C31;
+        SectionLabel { x: 16px; y: 14px; width: parent.width - 32px; height: 14px; text: "SLINT LICENSE ATTRIBUTION"; }
+        AboutSlint { x: 16px; y: 38px; width: parent.width - 32px; height: 150px; }
+    }
+}
+
+component ProtectionRail inherits Rectangle {
+    width: 276px;
+    background: #070809;
+    Rectangle { x: 0px; width: 1px; height: parent.height; background: #272C31; }
+    SectionLabel { x: 20px; y: 20px; width: parent.width - 40px; height: 14px; text: "PROTECTION"; }
+    Text {
+        x: 20px; y: 48px; width: parent.width - 40px; height: 30px;
+        text: AppData.active-fault-count > 0 ? AppData.active-fault-count + " ACTIVE" : "CLEAR";
+        color: AppData.active-fault-count > 0 ? #FF6A82 : #D9DEE3;
+        font-family: "Orbitron"; font-size: 20px; font-weight: 700;
+    }
+    Text { x: 20px; y: 84px; width: parent.width - 40px; text: AppData.recorded-fault-count + " RECORDED"; color: #7CCBFF; font-family: "Noto Sans Mono"; font-size: 9px; }
+    Rectangle { x: 20px; y: 116px; width: parent.width - 40px; height: 1px; background: #272C31; }
+    Rectangle {
+        x: 20px; y: 142px; width: parent.width - 40px; height: 142px;
+        background: AppData.active-fault-count > 0 ? #100306 : #000000;
+        border-width: 1px; border-color: AppData.active-fault-count > 0 ? #7D2032 : #272C31;
+        Rectangle { x: 0px; y: 0px; width: 3px; height: parent.height; background: AppData.active-fault-count > 0 ? #FF3B5C : #FFB15C; }
+        Text { x: 16px; y: 16px; width: parent.width - 32px; height: 18px; text: AppData.active-fault-count > 0 ? "ACTION REQUIRED" : "NO ACTIVE FAULT"; color: AppData.active-fault-count > 0 ? #FF6A82 : #737B83; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; }
+        Text { x: 16px; y: 45px; width: parent.width - 32px; height: 48px; text: AppData.active-fault-count > 0 ? AppData.geometry-read : "Protection remains armed. Recorded events stay available on the Faults page."; color: #D9DEE3; font-family: "Noto Sans"; font-size: 11px; wrap: word-wrap; }
+        ActionButton { x: 16px; y: 104px; width: parent.width - 32px; height: 25px; text: "OPEN FAULTS"; danger: AppData.active-fault-count > 0; clicked => { AppData.page = 2; } }
+    }
+    SectionLabel { x: 20px; y: 320px; width: parent.width - 40px; height: 14px; text: "DEVICE DISPLAY"; }
+    CycleField {
+        x: 20px; y: 346px; width: parent.width - 40px; value: AppData.screen-choice; label: "Screen choice";
+        cycle => { AppData.screen-choice = AppData.screen-choice == "main" ? "simple" : AppData.screen-choice == "simple" ? "current" : AppData.screen-choice == "current" ? "temp" : AppData.screen-choice == "temp" ? "status" : "main"; }
+    }
+    ActionButton { x: 20px; y: 392px; width: parent.width - 40px; text: "SHOW ON DEVICE"; primary: true; enabled: AppData.device-ready; clicked => { AppData.set-screen(AppData.screen-choice); } }
+    Rectangle { x: 20px; y: 452px; width: parent.width - 40px; height: 1px; background: #272C31; }
+    SectionLabel { x: 20px; y: 478px; width: parent.width - 40px; height: 14px; text: "CONNECTION"; }
+    Text { x: 20px; y: 508px; width: parent.width - 40px; height: 18px; text: AppData.daemon-version; color: #D9DEE3; font-family: "Noto Sans Mono"; font-size: 10px; overflow: elide; }
+    Text {
+        x: 20px; y: 534px; width: parent.width - 40px; height: 42px;
+        text: AppData.connected-port == "" ? AppData.connection-detail : AppData.connected-port;
+        color: AppData.daemon-online ? #737B83 : #FF6A82;
+        font-family: "Noto Sans Mono"; font-size: 8px; wrap: word-wrap;
+    }
+    Text { x: 20px; y: 586px; width: parent.width - 40px; height: 18px; text: AppData.sample-age; color: AppData.stale ? #737B83 : #7CCBFF; font-family: "Noto Sans Mono"; font-size: 9px; }
+    if AppData.operation-message != "" : Rectangle {
+        x: 20px; y: parent.height - 124px; width: parent.width - 40px; height: 100px;
+        background: AppData.operation-state == "error" ? #100306 : #000000;
+        border-width: 1px; border-color: AppData.operation-state == "error" ? #7D2032 : #272C31;
+        SectionLabel { x: 12px; y: 10px; width: parent.width - 24px; height: 14px; text: AppData.operation-state == "running" ? "WORKING" : AppData.operation-state == "error" ? "FAILED" : "COMPLETE"; }
+        Text { x: 12px; y: 33px; width: parent.width - 24px; height: 52px; text: AppData.operation-message; color: AppData.operation-state == "error" ? #FF6A82 : #D9DEE3; font-family: "Noto Sans"; font-size: 10px; wrap: word-wrap; }
+    }
+}
+
+export component MainWindow inherits Window {
+    in property <image> app-icon;
+    title: "WireView Pro II";
+    icon: app-icon;
+    preferred-width: 1440px;
+    preferred-height: 900px;
+    min-width: 1120px;
+    min-height: 720px;
+    background: #000000;
+    default-font-family: "Noto Sans";
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 62px;
+        background: #000000;
+        Text { x: 20px; y: 18px; width: 118px; height: 24px; text: "WIREVIEW"; color: #D9DEE3; font-family: "Orbitron"; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+        Text { x: 132px; y: 23px; width: 52px; height: 16px; text: "PRO II"; color: #FFB15C; font-family: "Noto Sans Mono"; font-size: 8px; font-weight: 700; }
+        Text { x: 208px; y: 21px; width: 220px; height: 18px; text: "CONDUCTOR FIELD"; color: #6F7780; font-family: "Noto Sans"; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+        Text { x: parent.width - 460px; y: 21px; width: 130px; height: 18px; text: AppData.session-label; color: #6F7780; font-family: "Noto Sans Mono"; font-size: 9px; horizontal-alignment: right; }
+        Text { x: parent.width - 314px; y: 21px; width: 122px; height: 18px; text: AppData.sample-age; color: AppData.stale ? #6F7780 : #7CCBFF; font-family: "Noto Sans Mono"; font-size: 9px; horizontal-alignment: right; }
+        Rectangle { x: parent.width - 170px; y: 27px; width: 7px; height: 7px; background: AppData.stale ? #6F7780 : AppData.active-fault-count > 0 ? #FF3B5C : AppData.device-ready ? #FFB15C : #737B83; }
+        Text { x: parent.width - 150px; y: 21px; width: 128px; height: 18px; text: AppData.connection-label; color: AppData.active-fault-count > 0 ? #FF6A82 : #D9DEE3; font-family: "Noto Sans Mono"; font-size: 9px; font-weight: 700; overflow: elide; }
+        Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #272C31; }
+    }
+
+    LeftRail { x: 0px; y: 62px; height: parent.height - 62px; }
+    Rectangle {
+        x: 220px; y: 62px; width: AppData.page == 7 ? parent.width - 220px : parent.width - 220px - 276px; height: parent.height - 62px; background: #000000;
+        if AppData.page == 0 : OverviewPage { width: parent.width; height: parent.height; }
+        if AppData.page == 1 : PinsPage { width: parent.width; height: parent.height; }
+        if AppData.page == 7 : GraphsPage { width: parent.width; height: parent.height; }
+        if AppData.page == 2 : FaultsPage { width: parent.width; height: parent.height; }
+        if AppData.page == 3 : HistoryPage { width: parent.width; height: parent.height; }
+        if AppData.page == 4 : ConfigurePage { width: parent.width; height: parent.height; }
+        if AppData.page == 5 : ThemesPage { width: parent.width; height: parent.height; }
+        if AppData.page == 6 : DevicePage { width: parent.width; height: parent.height; }
+    }
+    if AppData.page != 7 : ProtectionRail { x: parent.width - 276px; y: 62px; height: parent.height - 62px; }
+
+    if AppData.confirm-kind != "" : Rectangle {
+        x: 0px; y: 0px; width: parent.width; height: parent.height; background: #000000CC;
+        accessible-role: groupbox;
+        TouchArea { width: parent.width; height: parent.height; }
+        Rectangle {
+            x: (parent.width - 480px) / 2; y: (parent.height - 230px) / 2; width: 480px; height: 230px;
+            background: #070809; border-width: 1px; border-color: #4D555C;
+            Rectangle { x: 0px; y: 0px; width: 3px; height: parent.height; background: #FF3B5C; }
+            Text { x: 24px; y: 24px; width: parent.width - 48px; height: 28px; text: AppData.confirm-title; color: #D9DEE3; font-family: "Orbitron"; font-size: 17px; font-weight: 700; }
+            Text { x: 24px; y: 72px; width: parent.width - 48px; height: 70px; text: AppData.confirm-message; color: #899198; font-family: "Noto Sans"; font-size: 11px; wrap: word-wrap; }
+            HorizontalLayout {
+                x: 24px; y: parent.height - 58px; width: parent.width - 48px; height: 34px; spacing: 8px; alignment: end;
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                ActionButton { text: "CANCEL"; clicked => { AppData.confirm-kind = ""; } }
+                ActionButton { text: "CONFIRM"; danger: true; primary: true; clicked => {
+                    if (AppData.confirm-kind == "store") {
+                        AppData.store-config();
+                    } else if (AppData.confirm-kind == "clear-fault") {
+                        AppData.clear-faults(AppData.pending-fault-active-mask, AppData.pending-fault-logged-mask);
+                    } else if (AppData.confirm-kind == "factory-reset") {
+                        AppData.reset-config();
+                    } else if (AppData.confirm-kind == "reboot") {
+                        AppData.reboot-device();
+                    } else if (AppData.confirm-kind == "write-theme") {
+                        AppData.write-theme(AppData.selected-theme-slot, AppData.theme-path);
+                    }
+                    AppData.confirm-kind = "";
+                } }
+            }
+        }
+    }
+}
+
+export component AppTray inherits SystemTrayIcon {
+    in property <image> tray-icon;
+    in property <string> status: "WireView connecting";
+    callback show-window;
+    callback quit;
+
+    icon: tray-icon;
+    tooltip: status;
+    clicked => { root.show-window(); }
+
+    Menu {
+        MenuItem { title: root.status; enabled: false; }
+        MenuSeparator { }
+        MenuItem { title: "Open WireView"; activated => { root.show-window(); } }
+        MenuItem { title: "Quit"; activated => { root.quit(); } }
+    }
+}

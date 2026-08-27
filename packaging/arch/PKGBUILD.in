@@ -3,11 +3,11 @@
 pkgname=wireviewd
 pkgver=@VERSION@
 pkgrel=1
-pkgdesc='Linux daemon and CLI for the Thermal Grizzly WireView Pro II'
+pkgdesc='Linux daemon, CLI, and desktop app for the Thermal Grizzly WireView Pro II'
 url='@PROJECT_URL@'
 arch=('x86_64' 'aarch64')
 license=('MIT')
-depends=('gcc-libs' 'glibc' 'systemd' 'systemd-libs')
+depends=('fontconfig' 'gcc-libs' 'glibc' 'libx11' 'libxcursor' 'libxi' 'libxkbcommon' 'libxkbcommon-x11' 'systemd' 'systemd-libs' 'ttf-font' 'wayland')
 install=wireviewd.install
 options=('!debug' '!purge' '!strip')
 source=('wireviewd-root.tar')

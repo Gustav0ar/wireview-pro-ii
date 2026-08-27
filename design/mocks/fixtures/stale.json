@@ -1,0 +1,8 @@
+{
+  "connected": false,
+  "stale": true,
+  "faulted": false,
+  "connection-label": "DISCONNECTED",
+  "sample-age": "FROZEN  18 S",
+  "active-fault-count": "0"
+}

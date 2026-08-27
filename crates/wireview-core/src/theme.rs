@@ -55,7 +55,8 @@ impl ThemeAssetSlot {
     }
 
     #[must_use]
-    pub(crate) const fn address(self) -> u32 {
+    #[doc(hidden)]
+    pub const fn address(self) -> u32 {
         match self {
             Self::BackgroundOrange => 0x0000_3000,
             Self::BackgroundDark => 0x0001_D900,
