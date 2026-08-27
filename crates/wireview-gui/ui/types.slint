@@ -1,0 +1,260 @@
+export struct PinView {
+    id: string,
+    current: float,
+    current-label: string,
+    voltage: float,
+    voltage-label: string,
+    power: float,
+    power-label: string,
+    deviation: float,
+    deviation-label: string,
+    load: float,
+    alert: bool,
+}
+
+export struct FaultView {
+    name: string,
+    label: string,
+    detail: string,
+    action: string,
+    mask: int,
+    active: bool,
+    recorded: bool,
+    known: bool,
+}
+
+export struct HistoryRow {
+    device-time: string,
+    power: string,
+    current: string,
+    voltage: string,
+    input-temp: string,
+}
+
+export struct ThemeSlotView {
+    id: string,
+    label: string,
+    geometry: string,
+    status: string,
+}
+
+export global AppData {
+    in-out property <int> page: 0;
+    in-out property <bool> daemon-online: false;
+    in-out property <bool> device-ready: false;
+    in-out property <bool> stale: true;
+    in-out property <string> connection-label: "CONNECTING";
+    in-out property <string> connection-detail: "Opening the wireviewd socket";
+    in-out property <string> sample-age: "NO SAMPLE";
+    in-out property <string> daemon-version: "wireviewd";
+    in-out property <string> daemon-build: "";
+    in-out property <string> connected-port: "";
+    in-out property <string> session-label: "SESSION --";
+    in-out property <string> busy-operation: "";
+    in-out property <float> total-power: 0;
+    in-out property <string> total-power-label: "--";
+    in-out property <float> total-current: 0;
+    in-out property <string> total-current-label: "--";
+    in-out property <string> mean-current-label: "--";
+    in-out property <float> average-voltage: 0;
+    in-out property <string> average-voltage-label: "--";
+    in-out property <float> controller-vdd: 0;
+    in-out property <string> controller-vdd-label: "--";
+    in-out property <float> input-temperature: 0;
+    in-out property <string> input-temperature-label: "--";
+    in-out property <float> output-temperature: 0;
+    in-out property <string> output-temperature-label: "--";
+    in-out property <float> external-1-temperature: 0;
+    in-out property <float> external-2-temperature: 0;
+    in-out property <string> external-1-temperature-label: "NOT FITTED";
+    in-out property <string> external-2-temperature-label: "NOT FITTED";
+    in-out property <bool> external-1-present: false;
+    in-out property <bool> external-2-present: false;
+    in-out property <float> fan-duty: 0;
+    in-out property <string> fan-duty-label: "--";
+    in-out property <int> cable-capability: 0;
+    in-out property <string> cable-capability-label: "--";
+    in-out property <int> active-fault-mask: 0;
+    in-out property <int> logged-fault-mask: 0;
+    in-out property <int> unknown-active-mask: 0;
+    in-out property <int> unknown-logged-mask: 0;
+    in-out property <string> active-fault-hex: "0000";
+    in-out property <string> logged-fault-hex: "0000";
+    in-out property <string> unknown-active-hex: "0000";
+    in-out property <string> unknown-logged-hex: "0000";
+    in-out property <int> active-fault-count: 0;
+    in-out property <int> recorded-fault-count: 0;
+    in-out property <int> fault-row-count: 6;
+    in-out property <string> geometry-read: "No complete six-conductor sample";
+    in-out property <[PinView]> pins: [
+        { id: "P1", current: 0, current-label: "--", voltage: 0, voltage-label: "--", power: 0, power-label: "--", deviation: 0, deviation-label: "--", load: 0, alert: false },
+        { id: "P2", current: 0, current-label: "--", voltage: 0, voltage-label: "--", power: 0, power-label: "--", deviation: 0, deviation-label: "--", load: 0, alert: false },
+        { id: "P3", current: 0, current-label: "--", voltage: 0, voltage-label: "--", power: 0, power-label: "--", deviation: 0, deviation-label: "--", load: 0, alert: false },
+        { id: "P4", current: 0, current-label: "--", voltage: 0, voltage-label: "--", power: 0, power-label: "--", deviation: 0, deviation-label: "--", load: 0, alert: false },
+        { id: "P5", current: 0, current-label: "--", voltage: 0, voltage-label: "--", power: 0, power-label: "--", deviation: 0, deviation-label: "--", load: 0, alert: false },
+        { id: "P6", current: 0, current-label: "--", voltage: 0, voltage-label: "--", power: 0, power-label: "--", deviation: 0, deviation-label: "--", load: 0, alert: false },
+    ];
+    in-out property <string> overview-power-path: "";
+    in-out property <string> overview-power-range: "WAITING FOR LIVE SAMPLES";
+    in-out property <int> overview-power-sample-count: 0;
+
+    in-out property <string> graph-kind: "current";
+    in-out property <string> graph-title: "CURRENT FIELD";
+    in-out property <int> graph-series-count: 6;
+    in-out property <int> graph-window-seconds: 60;
+    in-out property <string> graph-window-axis-label: "-60 S";
+    in-out property <bool> graph-paused: false;
+    in-out property <int> graph-sample-count: 0;
+    in-out property <string> graph-buffer-label: "0 / 1200";
+    in-out property <string> graph-range-label: "WAITING FOR LIVE SAMPLES";
+    in-out property <string> graph-y-max-label: "--";
+    in-out property <string> graph-y-mid-label: "--";
+    in-out property <string> graph-y-min-label: "--";
+    in-out property <string> graph-summary-name: "TOTAL CURRENT";
+    in-out property <string> graph-summary-value: "-- A";
+    in-out property <string> graph-series-1-label: "I1";
+    in-out property <string> graph-series-2-label: "I2";
+    in-out property <string> graph-series-3-label: "I3";
+    in-out property <string> graph-series-4-label: "I4";
+    in-out property <string> graph-series-5-label: "I5";
+    in-out property <string> graph-series-6-label: "I6";
+    in-out property <string> graph-series-1-value: "";
+    in-out property <string> graph-series-2-value: "";
+    in-out property <string> graph-series-3-value: "";
+    in-out property <string> graph-series-4-value: "";
+    in-out property <string> graph-series-5-value: "";
+    in-out property <string> graph-series-6-value: "";
+    in-out property <bool> graph-series-1-visible: true;
+    in-out property <bool> graph-series-2-visible: true;
+    in-out property <bool> graph-series-3-visible: true;
+    in-out property <bool> graph-series-4-visible: true;
+    in-out property <bool> graph-series-5-visible: true;
+    in-out property <bool> graph-series-6-visible: true;
+    in-out property <string> graph-path-1: "";
+    in-out property <string> graph-path-2: "";
+    in-out property <string> graph-path-3: "";
+    in-out property <string> graph-path-4: "";
+    in-out property <string> graph-path-5: "";
+    in-out property <string> graph-path-6: "";
+    in-out property <[FaultView]> faults: [
+        { name: "chip_over_temperature", label: "Chip over temperature", detail: "No active or recorded alarm", action: "Reduce load and check WireView airflow and fan operation.", mask: 1, active: false, recorded: false, known: true },
+        { name: "sensor_over_temperature", label: "Sensor over temperature", detail: "No active or recorded alarm", action: "Reduce load. Reseat and inspect the connector and cable.", mask: 2, active: false, recorded: false, known: true },
+        { name: "over_current", label: "Total over current", detail: "No active or recorded alarm", action: "Reduce GPU load or verify the configured total-current limit.", mask: 4, active: false, recorded: false, known: true },
+        { name: "wire_over_current", label: "Wire over current", detail: "No active or recorded alarm", action: "Inspect and reseat the connector and cable for uneven contact.", mask: 8, active: false, recorded: false, known: true },
+        { name: "over_power", label: "Over power", detail: "No active or recorded alarm", action: "Reduce GPU load or verify the configured total-power limit.", mask: 16, active: false, recorded: false, known: true },
+        { name: "current_imbalance", label: "Current imbalance", detail: "No active or recorded alarm", action: "Reseat the connector and inspect the cable for poor contact.", mask: 32, active: false, recorded: false, known: true },
+    ];
+
+    in-out property <bool> config-loaded: false;
+    in-out property <bool> config-dirty: false;
+    in-out property <string> friendly-name: "";
+    in-out property <string> fan-mode: "curve";
+    in-out property <string> temperature-source: "maximum";
+    in-out property <string> duty-min: "0";
+    in-out property <string> duty-max: "100";
+    in-out property <string> fan-temp-min: "50.0";
+    in-out property <string> fan-temp-max: "80.0";
+    in-out property <string> backlight: "100";
+    in-out property <string> averaging: "1417";
+    in-out property <string> logging-interval: "60";
+    in-out property <string> shutdown-wait: "10";
+    in-out property <string> default-screen: "main";
+    in-out property <string> current-screen: "main";
+    in-out property <string> screen-choice: "main";
+    in-out property <string> poll-interval: "500";
+    in-out property <string> fault-temperature: "80.0";
+    in-out property <string> fault-total-current: "55";
+    in-out property <string> fault-wire-current: "10.5";
+    in-out property <string> fault-total-power: "660";
+    in-out property <string> fault-imbalance: "40";
+    in-out property <string> fault-min-load: "6";
+    in-out property <float> active-fault-temperature: 80;
+    in-out property <float> active-fault-total-current: 55;
+    in-out property <float> active-fault-wire-current: 10.5;
+    in-out property <string> active-fault-wire-current-label: "10.5";
+    in-out property <float> active-fault-total-power: 660;
+    in-out property <float> active-fault-imbalance: 40;
+    in-out property <float> active-fault-min-load: 6;
+    in-out property <string> fault-actions-display: "sensor_over_temperature,over_current,wire_over_current,over_power,current_imbalance";
+    in-out property <string> fault-actions-buzzer: "sensor_over_temperature,over_current,wire_over_current,over_power";
+    in-out property <string> fault-actions-soft-power: "none";
+    in-out property <string> fault-actions-hard-power: "sensor_over_temperature,over_current,wire_over_current,over_power";
+    in-out property <string> current-scale: "10";
+    in-out property <string> power-scale: "watts600";
+    in-out property <string> timeout-mode: "static";
+    in-out property <string> cycle-screens: "main,current,temperature";
+    in-out property <string> cycle-time: "10";
+    in-out property <string> display-timeout: "30";
+    in-out property <string> primary-color: "FFFFFF";
+    in-out property <string> secondary-color: "646464";
+    in-out property <string> highlight-color: "E64121";
+    in-out property <string> background-color: "000000";
+    in-out property <string> background-mode: "thermal_grizzly_orange";
+    in-out property <string> fan-theme: "thermal_grizzly_orange";
+    in-out property <string> rotation: "0";
+    in-out property <bool> inverted: false;
+
+    in-out property <bool> history-loading: false;
+    in-out property <bool> history-loaded: false;
+    in-out property <float> history-progress: 0;
+    in-out property <int> history-entry-count: 0;
+    in-out property <int> history-row-count: 0;
+    in-out property <bool> history-end-found: false;
+    in-out property <string> history-status: "No device history loaded";
+    in-out property <string> history-export-path: "wireview-history.csv";
+    in-out property <[HistoryRow]> history-rows: [];
+
+    in-out property <[ThemeSlotView]> theme-slots: [
+        { id: "background-orange", label: "Background orange", geometry: "320 x 170 / 108800 bytes", status: "Not read" },
+        { id: "background-dark", label: "Background dark", geometry: "320 x 170 / 108800 bytes", status: "Not read" },
+        { id: "fan-orange-1", label: "Fan orange 1", geometry: "73 x 73 / 10658 bytes", status: "Not read" },
+        { id: "fan-orange-2", label: "Fan orange 2", geometry: "73 x 73 / 10658 bytes", status: "Not read" },
+        { id: "fan-dark-1", label: "Fan dark 1", geometry: "73 x 73 / 10658 bytes", status: "Not read" },
+        { id: "fan-dark-2", label: "Fan dark 2", geometry: "73 x 73 / 10658 bytes", status: "Not read" },
+        { id: "fan-black-white-1", label: "Fan black and white 1", geometry: "73 x 73 / 10658 bytes", status: "Not read" },
+        { id: "fan-black-white-2", label: "Fan black and white 2", geometry: "73 x 73 / 10658 bytes", status: "Not read" },
+    ];
+    in-out property <string> selected-theme-slot: "background-dark";
+    in-out property <string> theme-path: "background-dark.rgb565";
+    in-out property <string> theme-status: "Select a named slot, then read or replace its exact RGB565 bytes.";
+    in-out property <image> theme-preview;
+    in-out property <bool> theme-preview-available: false;
+
+    in-out property <string> device-name: "WireView Pro II";
+    in-out property <string> device-uid: "Unavailable";
+    in-out property <string> firmware-version: "Unavailable";
+    in-out property <string> hardware-revision: "Unavailable";
+    in-out property <string> config-version: "Unavailable";
+    in-out property <string> device-build: "Unavailable";
+    in-out property <string> device-capabilities: "Unavailable";
+
+    in-out property <string> operation-state: "idle";
+    in-out property <string> operation-message: "";
+    in-out property <string> confirm-kind: "";
+    in-out property <string> confirm-title: "";
+    in-out property <string> confirm-message: "";
+    in-out property <int> pending-fault-active-mask: 0;
+    in-out property <int> pending-fault-logged-mask: 0;
+
+    callback refresh();
+    callback set-screen(string);
+    callback clear-faults(int, int);
+    callback apply-config();
+    callback store-config();
+    callback reload-config();
+    callback reset-config();
+    callback reboot-device();
+    callback load-history();
+    callback cancel-history();
+    callback export-history(string, string);
+    callback read-theme(string);
+    callback export-theme(string, string);
+    callback write-theme(string, string);
+    callback show-overview();
+    callback show-graphs();
+    callback select-graph-kind(string);
+    callback set-graph-window(int);
+    callback toggle-graph-series(int);
+    callback toggle-graph-paused();
+    callback clear-graph();
+}

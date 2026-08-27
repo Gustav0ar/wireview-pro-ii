@@ -225,41 +225,29 @@ impl DeviceSettings {
     /// comma-separated enum names, while `none` or an empty value clears the
     /// list.
     pub fn with_item(&self, key: &str, raw_value: &str) -> Result<Self, DeviceError> {
-        if key.is_empty() {
-            return invalid("configuration key cannot be empty");
-        }
         let mut document = serde_json::to_value(self).map_err(|error| {
             DeviceError::InvalidArgument(format!("failed to inspect configuration: {error}"))
         })?;
-        let mut current = &mut document;
-        let mut components = key.split('.').peekable();
-        while let Some(component) = components.next() {
-            if component.is_empty() {
-                return invalid(&format!("invalid configuration key \"{key}\""));
-            }
-            let object = current.as_object_mut().ok_or_else(|| {
-                DeviceError::InvalidArgument(format!(
-                    "\"{key}\" is not an editable configuration item"
-                ))
-            })?;
-            let next = object.get_mut(component).ok_or_else(|| {
-                DeviceError::InvalidArgument(format!("unknown configuration key \"{key}\""))
-            })?;
-            if components.peek().is_none() {
-                if next.is_object() {
-                    return invalid(&format!(
-                        "\"{key}\" is a configuration section, not an editable item"
-                    ));
-                }
-                *next = parse_item_value(key, next, raw_value)?;
-                let json = serde_json::to_string(&document).map_err(|error| {
-                    DeviceError::InvalidArgument(format!("failed to update configuration: {error}"))
-                })?;
-                return Self::from_json(&json);
-            }
-            current = next;
+        set_item_value(&mut document, key, raw_value)?;
+        settings_from_value(&document)
+    }
+
+    /// Returns a validated copy after applying a group of dotted-path edits atomically.
+    ///
+    /// Cross-field constraints are checked against the final document. This lets a
+    /// form change both sides of a range, such as fan duty minimum and maximum,
+    /// without an otherwise-invalid intermediate state.
+    pub fn with_items<'a>(
+        &self,
+        items: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Result<Self, DeviceError> {
+        let mut document = serde_json::to_value(self).map_err(|error| {
+            DeviceError::InvalidArgument(format!("failed to inspect configuration: {error}"))
+        })?;
+        for (key, raw_value) in items {
+            set_item_value(&mut document, key, raw_value)?;
         }
-        invalid("configuration key cannot be empty")
+        settings_from_value(&document)
     }
 
     #[must_use]
@@ -424,6 +412,47 @@ fn parse_item_value(
         )),
         serde_json::Value::Null => invalid(&format!("\"{key}\" cannot be changed")),
     }
+}
+
+fn set_item_value(
+    document: &mut serde_json::Value,
+    key: &str,
+    raw_value: &str,
+) -> Result<(), DeviceError> {
+    if key.is_empty() {
+        return invalid("configuration key cannot be empty");
+    }
+    let mut current = document;
+    let mut components = key.split('.').peekable();
+    while let Some(component) = components.next() {
+        if component.is_empty() {
+            return invalid(&format!("invalid configuration key \"{key}\""));
+        }
+        let object = current.as_object_mut().ok_or_else(|| {
+            DeviceError::InvalidArgument(format!("\"{key}\" is not an editable configuration item"))
+        })?;
+        let next = object.get_mut(component).ok_or_else(|| {
+            DeviceError::InvalidArgument(format!("unknown configuration key \"{key}\""))
+        })?;
+        if components.peek().is_none() {
+            if next.is_object() {
+                return invalid(&format!(
+                    "\"{key}\" is a configuration section, not an editable item"
+                ));
+            }
+            *next = parse_item_value(key, next, raw_value)?;
+            return Ok(());
+        }
+        current = next;
+    }
+    invalid("configuration key cannot be empty")
+}
+
+fn settings_from_value(document: &serde_json::Value) -> Result<DeviceSettings, DeviceError> {
+    let json = serde_json::to_string(document).map_err(|error| {
+        DeviceError::InvalidArgument(format!("failed to update configuration: {error}"))
+    })?;
+    DeviceSettings::from_json(&json)
 }
 
 impl DeviceConfiguration {
@@ -1191,6 +1220,24 @@ mod tests {
         assert!(settings.fault_actions.buzzer.is_empty());
         assert_eq!(settings.display.cycle_screens.len(), 4);
         assert!(settings.display.inverted);
+    }
+
+    #[test]
+    fn grouped_item_updates_validate_cross_field_constraints_at_the_end() {
+        let mut settings = DeviceSettings::from_configuration(&config(2));
+        settings.fan.duty_min_percent = 20;
+        settings.fan.duty_max_percent = 30;
+        settings.validate().unwrap();
+
+        assert!(settings.with_item("fan.duty_min_percent", "40").is_err());
+        let updated = settings
+            .with_items([
+                ("fan.duty_min_percent", "40"),
+                ("fan.duty_max_percent", "50"),
+            ])
+            .unwrap();
+        assert_eq!(updated.fan.duty_min_percent, 40);
+        assert_eq!(updated.fan.duty_max_percent, 50);
     }
 
     #[test]

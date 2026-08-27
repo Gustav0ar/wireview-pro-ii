@@ -35,7 +35,7 @@ trap 'report_error "$?" "${LINENO}" "${BASH_COMMAND}"' ERR
 trap cleanup EXIT
 
 cd "${project_dir}"
-cargo build --bins
+cargo build --package wireviewd --bins --locked
 
 start_daemon() {
   local mode="${1:-direct}"

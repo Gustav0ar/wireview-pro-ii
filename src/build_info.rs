@@ -6,15 +6,4 @@ pub const BUILD_ID: &str = match option_env!("WIREVIEW_BUILD_ID") {
     None => "development",
 };
 
-pub const API_VERSION: u32 = 2;
-pub const API_CAPABILITIES: &[&str] = &[
-    "configuration-items",
-    "device-control",
-    "device-info",
-    "display-leases",
-    "fault-registers",
-    "history-dump",
-    "telemetry",
-    "theme-assets-read",
-    "theme-assets-write",
-];
+pub use wireview_ipc::{API_CAPABILITIES, API_VERSION};

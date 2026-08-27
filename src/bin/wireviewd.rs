@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;

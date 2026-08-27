@@ -4,6 +4,9 @@ The `wireview` CLI talks to `wireviewd`; it never opens the USB device
 directly. Run `wireview --help` or `wireview COMMAND --help` for the installed
 command reference.
 
+For the native graphical client covering the same everyday workflows, see the
+[desktop app guide](desktop.md).
+
 Before using the CLI for the first time, enable the packaged socket and add
 your user to the authorized client group:
 

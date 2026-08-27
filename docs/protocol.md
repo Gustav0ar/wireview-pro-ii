@@ -1,6 +1,6 @@
 # WireView Pro II serial protocol
 
-This document records the protocol subset implemented by `wireviewd` 1.1.0.
+This document records the protocol subset implemented by `wireviewd`.
 
 ## Transport
 

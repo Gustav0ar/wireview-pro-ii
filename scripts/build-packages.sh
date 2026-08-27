@@ -33,9 +33,8 @@ require_command() {
   fi
 }
 
-if [[ "${WIREVIEW_SKIP_BUILD:-}" != "1" ]]; then
-  require_command cargo
-fi
+require_command cargo
+require_command python3
 require_command sha256sum
 require_command tar
 for format in "${formats[@]}"; do
@@ -53,13 +52,9 @@ for format in "${formats[@]}"; do
 done
 
 cd "${project_dir}"
-version="$(
-  sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1
-)"
+version="$(bash scripts/project-metadata.sh version)"
 package_version="${WIREVIEW_PACKAGE_VERSION:-${version}}"
-project_url="$(
-  sed -n 's/^repository = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1
-)"
+project_url="$(bash scripts/project-metadata.sh repository)"
 if [[ -z "${version}" || -z "${project_url}" ]]; then
   echo "failed to read package version or repository from Cargo.toml" >&2
   exit 1
@@ -116,14 +111,20 @@ fi
 install -d "${work_dir}/root" "${dist_dir}"
 
 if [[ "${WIREVIEW_SKIP_BUILD:-}" != "1" ]]; then
-  cargo build --release --locked --bins
-elif [[ ! -x target/release/wireviewd || ! -x target/release/wireview ]]; then
-  echo "WIREVIEW_SKIP_BUILD=1 requires target/release/wireviewd and wireview" >&2
+  cargo build --release --locked --workspace --bins
+elif [[ ! -x target/release/wireviewd || ! -x target/release/wireview ||
+        ! -x target/release/wireview-gui ]]; then
+  echo "WIREVIEW_SKIP_BUILD=1 requires target/release/wireviewd, wireview, and wireview-gui" >&2
   exit 1
 fi
 if ! target/release/wireview version \
   | grep -Fqx "wireview ${version} (build ${WIREVIEW_BUILD_ID})"; then
   echo "release binary does not contain WIREVIEW_BUILD_ID=${WIREVIEW_BUILD_ID}" >&2
+  exit 1
+fi
+if ! target/release/wireview-gui --version \
+  | grep -Fqx "wireview-gui ${version} (build ${WIREVIEW_BUILD_ID})"; then
+  echo "desktop binary does not contain WIREVIEW_BUILD_ID=${WIREVIEW_BUILD_ID}" >&2
   exit 1
 fi
 "${project_dir}/scripts/install-staged.sh" "${work_dir}/root"
@@ -150,10 +151,10 @@ build_deb() {
       'Maintainer: wireviewd contributors <wireviewd-maintainers@users.noreply.github.com>' \
       "Homepage: ${project_url}" \
       "Installed-Size: ${installed_size}" \
-      'Depends: libc6 (>= 2.34), libudev1, systemd, udev' \
-      'Description: Linux daemon for the Thermal Grizzly WireView Pro II' \
-      ' Provides telemetry, device configuration, and verified screen control through a' \
-      ' Varlink API and command-line client.'
+      'Depends: libc6 (>= 2.34), libfontconfig1, libudev1, libwayland-client0, libx11-6, libx11-xcb1, libxcursor1, libxi6, libxkbcommon0, libxkbcommon-x11-0, systemd, udev' \
+      'Description: Linux tools for the Thermal Grizzly WireView Pro II' \
+      ' Provides a native desktop app, a command-line client, and a daemon for' \
+      ' telemetry, validated configuration, and verified device control.'
   } >"${control_dir}/control"
   install -m 0755 packaging/debian/postinst "${control_dir}/postinst"
   install -m 0755 packaging/debian/prerm "${control_dir}/prerm"
@@ -255,10 +256,8 @@ for format in "${formats[@]}"; do
   "build_${format}"
 done
 
-if command -v cargo >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
-  bash "${project_dir}/scripts/generate-sbom.sh" \
-    "${dist_dir}/wireviewd.spdx.json"
-fi
+bash "${project_dir}/scripts/generate-sbom.sh" \
+  "${dist_dir}/wireviewd.spdx.json"
 
 (
   cd "${dist_dir}"

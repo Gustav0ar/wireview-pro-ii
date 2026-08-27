@@ -41,7 +41,7 @@ must not be inferred from codec tests or an earlier build.
 - Typed exact reads and guarded, verified sector-preserving writes for all
   eight V3 RGB565 theme slots
 - Generated API 2 interface/capability fingerprint, capability preflight, and
-  matching CLI/daemon build identity
+  matching GUI, CLI, and daemon build identity
 - Runtime daemon polling interval from 100 through 5000 ms
 - Verified physical-screen commands
 - Bounded debug screen pause/resume with independent history-dump ownership

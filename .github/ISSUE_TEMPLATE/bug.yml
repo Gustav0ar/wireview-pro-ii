@@ -1,4 +1,4 @@
-name: CLI, daemon, or packaging bug
+name: Desktop, CLI, daemon, or packaging bug
 description: Report a reproducible software or installation problem
 title: "[bug]: "
 labels:
@@ -13,7 +13,7 @@ body:
     id: version
     attributes:
       label: wireview version
-      description: Paste the complete output of `wireview version`.
+      description: Paste `wireview version` and, for desktop issues, `wireview-gui --version`.
     validations:
       required: true
   - type: input
@@ -52,7 +52,7 @@ body:
     id: output
     attributes:
       label: Sanitized output or logs
-      description: Include relevant CLI output or `journalctl -u wireviewd.service`. Remove device identifiers.
+      description: Include relevant client output or `journalctl -u wireviewd.service`. Remove device identifiers.
       render: shell
   - type: checkboxes
     id: privacy

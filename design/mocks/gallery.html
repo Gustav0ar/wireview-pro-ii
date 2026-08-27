@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WireView Pro II visual gate</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Noto Sans", sans-serif;
+      background: #000;
+      color: #f5f7f8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #000; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      align-items: baseline;
+      gap: 28px;
+      min-height: 58px;
+      padding: 16px 24px;
+      background: rgba(0, 0, 0, 0.96);
+      border-bottom: 1px solid #292d31;
+    }
+    h1 { margin: 0; font-size: 16px; letter-spacing: 0.04em; }
+    nav { display: flex; gap: 20px; }
+    a { color: #8dd7ff; text-decoration: none; font-size: 12px; }
+    a:focus-visible { outline: 2px solid #f47a2a; outline-offset: 4px; }
+    main { width: min(1500px, 100%); margin: 0 auto; }
+    section { padding: 34px 24px 46px; border-bottom: 1px solid #292d31; }
+    .heading { display: flex; align-items: baseline; gap: 18px; margin-bottom: 18px; }
+    h2 { margin: 0; font-size: 20px; }
+    p { margin: 0; color: #92999f; font-size: 13px; }
+    img { display: block; width: 100%; height: auto; border: 1px solid #292d31; }
+    details { margin-top: 18px; border-top: 1px solid #202428; }
+    summary { padding: 14px 0; color: #d9dee3; cursor: pointer; font-size: 12px; }
+    .states { display: grid; gap: 18px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>WireView Pro II visual gate</h1>
+    <nav aria-label="Mock directions">
+      <a href="#copper">A. Copper bus</a>
+      <a href="#console">B. Bench console</a>
+      <a href="#field">C. Conductor field</a>
+    </nav>
+  </header>
+  <main>
+    <section id="copper">
+      <div class="heading">
+        <h2>A. Copper bus</h2>
+        <p>Overview-first, brand warmth, one continuous power trace.</p>
+      </div>
+      <img src="rendered/copper-bus-fault.png" alt="Copper bus direction showing an active wire over-current fault">
+      <details>
+        <summary>Ready and stale states</summary>
+        <div class="states">
+          <img src="rendered/copper-bus-ready.png" alt="Copper bus direction in the ready state">
+          <img src="rendered/copper-bus-stale.png" alt="Copper bus direction with frozen stale telemetry">
+        </div>
+      </details>
+    </section>
+    <section id="console">
+      <div class="heading">
+        <h2>B. Bench console</h2>
+        <p>Keyboard-first measurement ledger with a strict lab-instrument rhythm.</p>
+      </div>
+      <img src="rendered/bench-console-fault.png" alt="Bench console direction showing an active wire over-current fault">
+      <details>
+        <summary>Ready and stale states</summary>
+        <div class="states">
+          <img src="rendered/bench-console-ready.png" alt="Bench console direction in the ready state">
+          <img src="rendered/bench-console-stale.png" alt="Bench console direction with frozen stale telemetry">
+        </div>
+      </details>
+    </section>
+    <section id="field">
+      <div class="heading">
+        <h2>C. Conductor field</h2>
+        <p>Six cable conductors become the primary visual and diagnostic structure.</p>
+      </div>
+      <img src="rendered/conductor-field-fault.png" alt="Conductor field direction showing an active wire over-current fault">
+      <details>
+        <summary>Ready and stale states</summary>
+        <div class="states">
+          <img src="rendered/conductor-field-ready.png" alt="Conductor field direction in the ready state">
+          <img src="rendered/conductor-field-stale.png" alt="Conductor field direction with frozen stale telemetry">
+        </div>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

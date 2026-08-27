@@ -4,6 +4,19 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 1.2.0 - 2026-08-27
+
+- Add the native Rust and Slint desktop application with overview, conductor,
+  graph, fault, history, configuration, theme, and device pages.
+- Add bounded full-width telemetry graphs with unit and series selection,
+  pause, clear, and 60-second, 5-minute, and 10-minute windows.
+- Extract the shared domain model and typed Varlink client contract into
+  `wireview-core` and `wireview-ipc` workspace crates.
+- Bundle the GUI, CLI, daemon, desktop launcher, and icon in every Debian, RPM,
+  and Arch package, with explicit X11 and Wayland runtime dependencies.
+- Add deterministic GUI interaction and Xvfb smoke tests for every page, the
+  minimum window size, and a live mock-daemon connection.
+
 ## 1.1.1 - 2026-08-24
 
 - Fix selective fault clearing by converting daemon bits-to-clear masks into

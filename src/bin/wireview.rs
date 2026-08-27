@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::{
     fs::{self, File, OpenOptions},
     io::{BufWriter, Write},
@@ -13,7 +15,8 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use futures_util::{StreamExt, pin_mut};
 use serde::{Deserialize, Serialize};
-use wireviewd::build_info::{API_CAPABILITIES, API_VERSION, BUILD_ID, VERSION};
+use wireview_ipc::{CompatibilityError, validate_status};
+use wireviewd::build_info::{BUILD_ID, VERSION};
 use wireviewd::config::{DeviceSettings, FaultKind};
 use wireviewd::history::{FLASH_LENGTH, HistoryEntry, visit_history};
 use wireviewd::theme::{ThemeAssetSlot, sha256_hex};
@@ -1096,47 +1099,23 @@ fn decode_configuration_dto(
 }
 
 fn require_api_version(status: &StatusDto) -> Result<(), Box<dyn std::error::Error>> {
-    if status.api_version != API_VERSION {
-        return Err(std::io::Error::other(format!(
-            "Unsupported wireviewd API version {}; this wireview CLI requires version \
-             {API_VERSION}. Install matching wireview and wireviewd packages.",
-            status.api_version
-        ))
-        .into());
-    }
-    let expected_compatibility = wireviewd::varlink::api_compatibility_id();
-    if status.api_compatibility_id != expected_compatibility {
-        let reported = if status.api_compatibility_id.is_empty() {
-            "not reported"
-        } else {
-            &status.api_compatibility_id
+    validate_status(status).map_err(|error| {
+        let message = match error {
+            CompatibilityError::ApiVersion { reported, required } => format!(
+                "Unsupported wireviewd API version {reported}; this wireview CLI requires version \
+                 {required}. Install matching wireview and wireviewd packages."
+            ),
+            CompatibilityError::ApiSchema { reported, required } => format!(
+                "Incompatible wireviewd API schema {reported:?}; this CLI requires \
+                 {required:?}. Install matching wireview and wireviewd packages."
+            ),
+            CompatibilityError::MissingCapabilities(missing) => format!(
+                "wireviewd is missing required API capabilities: {missing}. Install matching \
+                 wireview and wireviewd packages."
+            ),
         };
-        return Err(std::io::Error::other(format!(
-            "Incompatible wireviewd API schema {reported:?}; this CLI requires \
-             {expected_compatibility:?}. Install matching wireview and wireviewd packages."
-        ))
-        .into());
-    }
-    let missing = API_CAPABILITIES
-        .iter()
-        .filter(|required| {
-            !status
-                .api_capabilities
-                .iter()
-                .any(|available| available == **required)
-        })
-        .copied()
-        .collect::<Vec<_>>();
-    if missing.is_empty() {
-        Ok(())
-    } else {
-        Err(std::io::Error::other(format!(
-            "wireviewd is missing required API capabilities: {}. Install matching wireview and \
-             wireviewd packages.",
-            missing.join(", ")
-        ))
-        .into())
-    }
+        Box::<dyn std::error::Error>::from(std::io::Error::other(message))
+    })
 }
 
 fn generate_cli_assets(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -2065,6 +2044,11 @@ mod tests {
         assert_eq!(encoded["api_version"], serde_json::json!(2));
         assert!(encoded["api_version"].is_number());
         assert!(require_api_version(&status(2)).is_ok());
+
+        let mut released_v2 = status(2);
+        released_v2.api_compatibility_id = "wireview-2-047f86fdb168c045".into();
+        assert!(require_api_version(&released_v2).is_ok());
+
         for version in [0, 1, u32::MAX] {
             let error = require_api_version(&status(version))
                 .unwrap_err()

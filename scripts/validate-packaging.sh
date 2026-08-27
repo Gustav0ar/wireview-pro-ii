@@ -16,9 +16,12 @@ cd "${project_dir}"
 bash -n \
   scripts/build-packages.sh \
   scripts/build-identity.sh \
+  scripts/capture-screenshots.sh \
   scripts/generate-sbom.sh \
   scripts/install-staged.sh \
+  scripts/project-metadata.sh \
   scripts/qualify-release.sh \
+  scripts/smoke-gui.sh \
   scripts/smoke-varlink.sh \
   scripts/smoke-hardware.sh \
   scripts/soak-test.sh \
@@ -28,10 +31,37 @@ for script in packaging/debian/postinst packaging/debian/prerm packaging/debian/
   sh -n "${script}"
 done
 
-bash scripts/test-build-identity.sh
+project_version="$(bash scripts/project-metadata.sh version)"
+project_repository="$(bash scripts/project-metadata.sh repository)"
+if [[ ! "${project_version}" =~ ^[0-9]+([.][0-9]+){2}$ ]]; then
+  echo "unexpected workspace version: ${project_version}" >&2
+  exit 1
+fi
+test "${project_repository}" = \
+  "https://github.com/Gustav0ar/wireview-pro-ii"
+cargo metadata --locked --no-deps --format-version 1 |
+  python3 -c '
+import json
+import sys
+
+expected = sys.argv[1]
+metadata = json.load(sys.stdin)
+members = set(metadata["workspace_members"])
+versions = {
+    package["version"]
+    for package in metadata["packages"]
+    if package["id"] in members
+}
+if versions != {expected}:
+    raise SystemExit(f"workspace package versions do not match: {sorted(versions)}")
+' "${project_version}"
+
+env -u WIREVIEW_ALLOW_DIRTY -u WIREVIEW_BUILD_ID \
+  bash scripts/test-build-identity.sh
 
 build_identity="$(
-  bash scripts/build-identity.sh 1785414000
+  WIREVIEW_ALLOW_DIRTY=1 \
+    bash scripts/build-identity.sh 1785414000
 )"
 if [[ ! "${build_identity}" =~ ^(git|source)-[0-9a-f]{12}-20260730122000$ ]]; then
   echo "unexpected build identity: ${build_identity}" >&2
@@ -42,7 +72,14 @@ udevadm verify --resolve-names=never \
   packaging/udev/70-wireview-pro-ii.rules
 varlinkctl validate-idl \
   interfaces/io.github.Gustav0ar.WireView.varlink
-cargo build --release --locked --bins
+desktop-file-validate \
+  packaging/applications/io.github.Gustav0ar.WireView.desktop
+python3 - <<'PY'
+import xml.etree.ElementTree as ET
+
+ET.parse("packaging/icons/hicolor/scalable/apps/io.github.Gustav0ar.WireView.svg")
+PY
+cargo build --release --locked --workspace --bins
 SOURCE_DATE_EPOCH=1785326400 \
   bash scripts/generate-sbom.sh "${sbom_path}"
 python3 -m json.tool "${sbom_path}" >/dev/null
@@ -77,6 +114,7 @@ done
 
 test "$(stat -c '%a' "${stage_dir}/usr/bin/wireviewd")" = "755"
 test "$(stat -c '%a' "${stage_dir}/usr/bin/wireview")" = "755"
+test "$(stat -c '%a' "${stage_dir}/usr/bin/wireview-gui")" = "755"
 test "$(stat -c '%a' \
   "${stage_dir}/usr/lib/udev/rules.d/70-wireview-pro-ii.rules")" = "644"
 test "$(stat -c '%a' \
@@ -85,10 +123,21 @@ test "$(stat -c '%a' \
   "${stage_dir}/usr/share/varlink/interfaces/io.github.Gustav0ar.WireView.varlink")" = "644"
 test "$(stat -c '%a' \
   "${stage_dir}/usr/share/doc/wireviewd/release-qualification.md")" = "644"
-for document in usage operations development; do
+for document in usage desktop operations development; do
   test "$(stat -c '%a' \
     "${stage_dir}/usr/share/doc/wireviewd/${document}.md")" = "644"
 done
+for asset in \
+  usr/share/applications/io.github.Gustav0ar.WireView.desktop \
+  usr/share/icons/hicolor/scalable/apps/io.github.Gustav0ar.WireView.svg; do
+  test "$(stat -c '%a' "${stage_dir}/${asset}")" = "644"
+done
+grep -Fqx 'Exec=wireview-gui' \
+  "${stage_dir}/usr/share/applications/io.github.Gustav0ar.WireView.desktop"
+grep -Fqx 'Icon=io.github.Gustav0ar.WireView' \
+  "${stage_dir}/usr/share/applications/io.github.Gustav0ar.WireView.desktop"
+grep -Fqx 'StartupWMClass=io.github.Gustav0ar.WireView' \
+  "${stage_dir}/usr/share/applications/io.github.Gustav0ar.WireView.desktop"
 for asset in \
   usr/share/man/man1/wireview.1 \
   usr/share/bash-completion/completions/wireview \
@@ -107,6 +156,16 @@ grep -Fq \
 grep -Fq '%doc /usr/share/doc/wireviewd/usage.md' \
   packaging/rpm/wireviewd.spec.in
 grep -Fq '%{_mandir}/man1/wireview.1*' packaging/rpm/wireviewd.spec.in
+grep -Fq '/usr/bin/wireview-gui' packaging/rpm/wireviewd.spec.in
+for dependency in libx11-xcb1 libxcursor1 libxi6 libxkbcommon-x11-0; do
+  grep -Fq "${dependency}" scripts/build-packages.sh
+done
+for dependency in libX11-xcb libXcursor libXi libxkbcommon-x11; do
+  grep -Fq "Requires:       ${dependency}" packaging/rpm/wireviewd.spec.in
+done
+for dependency in libxcursor libxi libxkbcommon-x11 ttf-font; do
+  grep -Fq "'${dependency}'" packaging/arch/PKGBUILD.in
+done
 test "$(find "${stage_dir}" -type f -perm /0002 -print -quit)" = ""
 
 echo "Packaging validation passed"

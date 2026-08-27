@@ -1,0 +1,46 @@
+[package]
+name = "wireview-gui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "WireView Pro II desktop client"
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+screenshots = []
+
+[[bin]]
+name = "wireview-gui"
+path = "src/main.rs"
+
+[[bin]]
+name = "wireview-screenshot"
+path = "src/bin/wireview-screenshot.rs"
+required-features = ["screenshots"]
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+slint = { version = "=1.17.1", default-features = false, features = [
+    "accessibility",
+    "backend-winit",
+    "compat-1-2",
+    "renderer-software",
+    "std",
+    "system-tray",
+] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+wireview-core.workspace = true
+wireview-ipc.workspace = true
+zlink = { workspace = true, features = ["idl-parse"] }
+
+[build-dependencies]
+slint-build = "=1.17.1"
+
+[lints]
+workspace = true
